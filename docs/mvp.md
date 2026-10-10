@@ -1,3 +1,7 @@
+> ⚠️ **Historical technical exploration / 历史技术探索稿**
+> 本文件写于多轮玩法访谈前，包含尚未验证或已经不符合当前偏好的技术假设（例如摄像头识别）。**不要将其视为定稿架构或当前 MVP 承诺。**
+> 当前方向以 [游戏设计愿景 v0.1](game-design-vision.md) 为准：不使用摄像头、手机全程横屏、支持普通电视镜像投屏；Joy-Con/DIY 外设等待验证。
+
 # MVP roadmap
 
 ## Definition of playable

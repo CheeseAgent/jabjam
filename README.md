@@ -1,82 +1,41 @@
-# JabJam
+# JabJam 🥊🎵
 
-Open-source rhythm boxing with real motion tracking and auto-generated charts.
+**Open-source rhythm boxing with your own music.**  
+一款受 Fit Boxing 体验启发的开源音乐拳击健身游戏：在手机上跟着卡通 3D 教练、节奏轨道和自己喜欢的本地歌曲认真挥拳，不需要 Switch。
 
-JabJam is a mobile-first rhythm boxing project inspired by fitness boxing games. The goal is to make a game that does not just ask the player to tap a screen: it should detect real punches and defensive movement, generate playable boxing charts from music, and run on commodity phones with optional low-cost wearable sensors.
+> 🚧 **产品愿景 / 设计探索中**，尚无可下载游玩的正式版本。当前的技术文件是早期假设，不代表技术栈或开发范围已经定稿。
 
-## Product idea
+## 想要的体验
 
-- Phone camera tracks body movement: slip left/right, duck, stance and recovery.
-- Two wrist IMU sensors track real punches with low latency.
-- Music analysis builds a beat grid from an uploaded track.
-- A choreography generator turns that beat grid into boxing combos.
-- The game engine scores timing and movement quality.
+- **自己喜欢的音乐**：从本地歌曲生成结合节拍、乐段和音乐情绪的拳击谱面；同一谱面可以重复挑战纪录和 Full Combo。
+- **真正动起来**：用运动控制器判定左右直拳、勾拳，并探索侧闪和步法；误判、公平性与低延迟是核心挑战。
+- **Fit Boxing 风格的陪练**：卡通 3D 教练示范和喊口令，但游戏中的视觉主角是**节奏轨道**。
+- **适合在家玩**：手机**全程横屏**，可独立游玩或用系统的**镜像投屏**在电视上显示。不使用摄像头。
+- **日常愿意坚持**：自动短训练或自由选曲、每周目标、打卡日历、结束挥拳盖章、累计出拳与 GitHub 风格热力图。
+- **真正开放**：希望社区一起改进游戏、适配手柄和传感器、创造教练及内容，默认不上传或公开分发用户的本地版权音乐。
 
-## MVP
+## 当前最重要的文档
 
-The first playable version targets:
+📖 **[游戏设计愿景 / Game Design Vision v0.1](docs/game-design-vision.md)**
 
-- Left jab
-- Right cross
-- Left hook
-- Right hook
-- Slip left
-- Slip right
-- Duck
-- Local music upload
-- Automatic beat detection
-- Easy / Normal / Hard chart generation
-- PERFECT / GOOD / MISS timing judgement
-- Android-first mobile web app
+文档包含多轮玩家访谈中已确认的偏好、想要但未定的功能、游玩流程、待验证的风险与社区方向。**它是体验讨论的主要参考，但不是 MVP 清单。**
 
-## Architecture
+## 外设探索
 
-```text
-                    +----------------------+
-                    |     Music Track      |
-                    +----------+-----------+
-                               |
-                               v
-                    +----------------------+
-                    | Beat / onset analysis|
-                    +----------+-----------+
-                               |
-                               v
-                    +----------------------+
-                    | Choreography Engine  |
-                    +----------+-----------+
-                               |
-                               v
-+-------------+      +----------------------+      +----------------+
-| Wrist IMUs  | ---> |      Game Engine     | <--- | Camera / Pose  |
-| BLE events  |      | timing + validation  |      | body events    |
-+-------------+      +----------+-----------+      +----------------+
-                               |
-                               v
-                    +----------------------+
-                    |      Mobile UI       |
-                    +----------------------+
-```
+- **Joy-Con L/R（初代）**：玩家已有一对，计划测试 Android 连接、运动数据读取与震动反馈；目前**尚未验证**。
+- **低成本 DIY 传感器**：作为开放、易复现的备选方向，期望成本约 ¥50–100，效果/成本待实测。
+- **不使用摄像头**；正式动作计分必须有可信的输入。纯软件模拟可用于开发测试，不代表正式成绩。
 
-See [docs/architecture.md](docs/architecture.md), [docs/event-model.md](docs/event-model.md) and [docs/mvp.md](docs/mvp.md).
+## 仓库中的早期技术草案
 
-## Initial technical direction
+以下文件保留作历史技术思路，**并非已确认的实现路线**。其中的摄像头识别、Angular/PWA、FastAPI、阶段划分与动作列表等早期假设都需要对照最新愿景重新评估：
 
-- Frontend: Angular, TypeScript, PWA
-- Pose tracking: MediaPipe Pose Landmarker
-- Wearables: BLE + 6-axis IMU, one device per wrist
-- Chart analysis service: Python / FastAPI
-- Beat analysis: start with a proven onset/beat library, keep the game-side chart format library-independent
-- Storage: local-first for MVP
+- [Architecture（早期技术草案）](docs/architecture.md)
+- [Event model（早期事件设计）](docs/event-model.md)
+- [MVP roadmap（早期假设，非当前承诺）](docs/mvp.md)
 
-## Design principles
+## 社区愿望
 
-1. Gameplay must still work when the chart generator or sensor implementation changes.
-2. Sensor integrations emit normalized events; the game engine never consumes raw hardware packets.
-3. Automatic charts should feel like boxing combinations, not random notes placed on beats.
-4. The first version optimizes for a playable loop, not motion-classification perfection.
-5. Hardware is optional infrastructure, not a permanent dependency of the UI architecture.
+未来希望大家共同建设教练、角色动画、拳击课程、音乐分析、设备驱动与记录体验，保持统一且原创的视觉风格。具体贡献流程、许可证与扩展接口仍待讨论。
 
-## Status
-
-🚧 Very early prototype. The repository is intentionally starting small and architecture-first.
+目前最重要的不是堆砌功能，而是验证一个简单体验：**打开喜欢的歌曲，跟着教练真正挥拳，完成训练，再挥最后一拳盖章。**
