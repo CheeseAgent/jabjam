@@ -3,7 +3,7 @@
 **Open-source rhythm boxing with your own music.**  
 一款受 Fit Boxing 体验启发的开源音乐拳击健身游戏：在手机上跟着卡通 3D 教练、节奏轨道和自己喜欢的本地歌曲认真挥拳，不需要 Switch。
 
-> 🚧 **基础原型已搭建，尚非正式游戏。** 使用 Godot 4.6.3，可在 Linux 上运行开发工程。当前提供 36 秒原创演示音乐、固定谱面、键盘/屏幕按钮模拟拳法、几何 3D 教练、暂停、结算盖章和本地练习记录。Joy-Con、真实动作识别和本地歌曲分析尚未接入。
+> 🚧 **基础原型已搭建，尚非正式游戏。** 使用 Godot 4.6.3，可在 Linux 上运行开发工程。当前支持本地歌曲导入、基于节奏与能量的自动编排、曲库与谱面保存，以及模拟拳法、几何 3D 教练和练习结算。仍保留 36 秒演示曲。Joy-Con 和真实动作识别尚未接入。
 
 ## 运行基础原型
 
@@ -23,7 +23,9 @@ sh scripts/verify.sh
 docker compose run --build --rm check
 ```
 
-模拟成绩只写入 `user://simulation_history.json`，不生成正式运动成绩或官方 Full Combo。内置音乐由代码合成，运行时无需联网或外部素材。
+点击 **CHOOSE / IMPORT SONG → IMPORT SONG…**，选择本地 **MP3 / WAV / Ogg Vorbis**，分析完成后按 Space 练习整首歌。支持 Easy / Normal 强度；估拍不准时可勾选 **Correct BPM manually** 修正。相同音源和设置会复用已保存的谱面。支持 8 秒–10 分钟、最大 64 MiB 的文件；暂不支持 FLAC。详见 [导歌与自动编排](docs/music-import.md)。
+
+模拟成绩只写入 `user://simulation_history.json`，不生成正式运动成绩或官方 Full Combo。内置音乐由代码合成，导入歌曲只保存在本机，运行时无需联网。
 
 详见 **[开发、Linux 与 Docker 指南](docs/development.md)**。Docker 无界面检查不会显示游戏画面；带画面运行需要桌面显示和音频连接。
 

@@ -14,7 +14,7 @@ run_check() {
     shift
     log="$test_root/output.log"
     code=0
-    "$@" >"$log" 2>&1 || code=$?
+    timeout "${GODOT_CHECK_TIMEOUT:-120}" "$@" >"$log" 2>&1 || code=$?
     cat "$log"
     if [ "$code" -ne 0 ]; then return "$code"; fi
     # Godot can return 0 after import, resource or script errors.

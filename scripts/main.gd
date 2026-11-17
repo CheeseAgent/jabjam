@@ -4,6 +4,7 @@ const Session = preload("res://scripts/session.gd")
 const DemoAudio = preload("res://scripts/demo_audio.gd")
 const Store = preload("res://scripts/practice_store.gd")
 const InputAdapter = preload("res://scripts/simulated_input.gd")
+const SongPicker = preload("res://scripts/song_picker.gd")
 const Coach = preload("res://scripts/coach.gd")
 const MINT := Color("72efc0")
 const CORAL := Color("ff947f")
@@ -13,6 +14,11 @@ const LANES := ["left_hook", "left_jab", "right_jab", "right_hook"]
 const NAMES := ["L HOOK", "L JAB", "R JAB", "R HOOK"]
 const KEYS := ["D", "F", "J", "K"]
 
+var picker := SongPicker.new()
+var library_button: Button
+var selected_chart: Dictionary = {}
+var selected_song: Dictionary = {"title": "DEMO LOOP", "id": "demo", "duration": 36.0}
+var demo_stream: AudioStream
 var session := Session.new()
 var player := AudioStreamPlayer.new()
 var input_adapter := InputAdapter.new()
@@ -30,7 +36,9 @@ var history_count := 0
 
 func _ready() -> void:
 	add_child(player)
-	player.stream = DemoAudio.create_stream()
+	demo_stream = DemoAudio.create_stream()
+	player.stream = demo_stream
+	player.finished.connect(_song_finished)
 	player.volume_db = -5.0
 	add_child(input_adapter)
 	input_adapter.punch.connect(_punch)
@@ -47,6 +55,12 @@ func _ready() -> void:
 		var action: String = LANES[i]
 		strike_buttons.append(_button(KEYS[i] + "   " + NAMES[i], Rect2(80 + i * 190, 570, 176, 58),
 			_punch.bind(action), MINT if i < 2 else CORAL))
+	library_button = _button("CHOOSE / IMPORT SONG", Rect2(520, 570, 340, 58), _open_library)
+	add_child(picker)
+	picker.visible = false
+	picker.song_selected.connect(_select_song)
+	picker.demo_selected.connect(_select_demo)
+	picker.dismissed.connect(func(): picker.hide(); _sync_ui())
 	history_count = Store.read_history().size()
 	_sync_ui()
 
@@ -74,7 +88,9 @@ func _audio_time() -> float:
 	return maxf(0.0, player.get_playback_position() + AudioServer.get_time_since_last_mix() - AudioServer.get_output_latency())
 
 func _start() -> void:
-	session.start()
+	if picker.visible:
+		return
+	session.start(selected_chart)
 	player.stream_paused = false
 	player.play()
 	demonstrated_note = -1
@@ -84,6 +100,8 @@ func _start() -> void:
 	_sync_ui()
 
 func _primary() -> void:
+	if picker.visible:
+		return
 	match session.state:
 		Session.State.READY, Session.State.RESULTS:
 			_start()
@@ -143,16 +161,48 @@ func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and session.state == Session.State.PLAYING:
 		_pause()
 
+func _open_library() -> void:
+	picker.refresh()
+	picker.show()
+	_sync_ui()
+
+func _select_song(result: Dictionary) -> void:
+	selected_song = result.song
+	selected_chart = result.chart
+	player.stream = result.stream
+	session.state = Session.State.READY
+	picker.hide()
+	_sync_ui()
+
+func _select_demo() -> void:
+	selected_song = {"title": "DEMO LOOP", "id": "demo", "duration": 36.0}
+	selected_chart = {}
+	player.stream = demo_stream
+	session.state = Session.State.READY
+	picker.hide()
+	_sync_ui()
+
+func _song_finished() -> void:
+	# Compressed files may end just before their reported duration; never get stuck.
+	if session.state == Session.State.PLAYING:
+		session.advance(session.duration)
+		_sync_ui()
+
+func _duration_text(seconds: float) -> String:
+	var total := int(ceil(seconds))
+	return "%d:%02d" % [total / 60, total % 60]
+
 func _sync_ui() -> void:
 	var playing: bool = session.state in [Session.State.PLAYING, Session.State.PAUSED]
 	if not playing:
 		player.stop()
-	coach.visible = session.state in [Session.State.READY, Session.State.PLAYING]
+	coach.visible = not picker.visible and session.state in [Session.State.READY, Session.State.PLAYING]
 	coach.process_mode = Node.PROCESS_MODE_INHERIT if coach.visible else Node.PROCESS_MODE_DISABLED
 	pause_button.visible = playing
 	pause_button.text = "RESUME / ESC" if session.state == Session.State.PAUSED else "PAUSE / ESC"
 	restart_button.visible = playing
-	primary_button.visible = not playing or session.state == Session.State.PAUSED
+	primary_button.visible = not picker.visible and (not playing or session.state == Session.State.PAUSED)
+	library_button.visible = not picker.visible and session.state in [Session.State.READY, Session.State.RESULTS]
 	primary_button.text = "START PRACTICE   /   SPACE"
 	if session.state == Session.State.PAUSED:
 		primary_button.text = "RESUME   /   SPACE"
@@ -196,7 +246,7 @@ func _draw() -> void:
 		Session.State.STAMP:
 			_text(Vector2(80, 225), "MAKE IT COUNT.", 60)
 			_text(Vector2(84, 285), "Your practice is complete. One last punch to seal it.", 24, MUTED)
-			_text(Vector2(84, 388), "36 SECONDS.  YOUR MOMENT.", 32, MINT)
+			_text(Vector2(84, 388), _duration_text(session.duration) + " COMPLETED.  YOUR MOMENT.", 32, MINT)
 		Session.State.RESULTS:
 			_draw_results()
 
@@ -204,23 +254,23 @@ func _draw_home() -> void:
 	_text(Vector2(80, 155), "01 / THE PRACTICE ROOM", 17, MINT)
 	_text(Vector2(76, 235), "FIND YOUR", 66)
 	_text(Vector2(76, 310), "FIGHTING RHYTHM.", 66)
-	_text(Vector2(82, 363), "A small loop. Four moves. A fresh start.", 25, MUTED)
+	_text(Vector2(82, 363), str(selected_song.title).left(48), 25, MUTED)
 	_text(Vector2(82, 405), "Follow the lanes. Strike as each tile meets the line.", 21, MUTED)
 	for i in range(3):
 		_panel(Rect2(80 + i * 245, 449, 228, 76), Color("142131"), 12)
-	_text(Vector2(98, 480), "36 SEC", 25)
-	_text(Vector2(98, 506), "QUICK PRACTICE", 14, MUTED)
-	_text(Vector2(343, 480), "120 BPM", 25)
-	_text(Vector2(343, 506), "ORIGINAL DEMO LOOP", 14, MUTED)
-	_text(Vector2(588, 480), "4 MOVES", 25)
+	_text(Vector2(98, 480), _duration_text(selected_song.duration), 25)
+	_text(Vector2(98, 506), "SONG LENGTH", 14, MUTED)
+	_text(Vector2(343, 480), "%s BPM" % str(selected_chart.get("bpm", 120)), 25)
+	_text(Vector2(343, 506), "DEMO" if selected_chart.is_empty() else ("ESTIMATE / CHECK BEAT" if float(selected_chart.get("confidence", 0)) < 0.35 and float(selected_chart.get("bpm_override", 0)) == 0 else "ARRANGED LOCALLY"), 14, MUTED)
+	_text(Vector2(588, 480), "%d NOTES" % (32 if selected_chart.is_empty() else selected_chart.notes.size()), 25)
 	_text(Vector2(588, 506), "KEYBOARD OR TOUCH", 14, MUTED)
 	_text(Vector2(910, 181), "YOUR CORNER", 17, MINT)
 	_text(Vector2(903, 544), "Geometric coach / prototype", 16, MUTED)
-	_text(Vector2(520, 605), "%d saved practices. No verified exercise scores." % history_count, 17, MUTED)
+	_text(Vector2(900, 604), "%d saved practices" % history_count, 17, MUTED)
 
 func _draw_training() -> void:
-	_text(Vector2(80, 139), "DEMO LOOP / 120 BPM", 19, MINT)
-	_text(Vector2(570, 139), "%02d / 36 SEC" % mini(36, int(session.clock)), 19, MUTED)
+	_text(Vector2(80, 139), str(selected_song.title).left(30) + " / %s BPM" % str(selected_chart.get("bpm", 120)), 19, MINT)
+	_text(Vector2(570, 139), _duration_text(minf(session.duration, session.clock)) + " / " + _duration_text(session.duration), 19, MUTED)
 	_panel(Rect2(80, 163, 746, 370), Color("101b29"))
 	for i in range(4):
 		var x := 80.0 + i * 190
@@ -244,17 +294,17 @@ func _draw_training() -> void:
 	if flash > 0:
 		_text(Vector2(905, 548), feedback, 25, MINT if feedback in ["PERFECT", "GOOD"] else CORAL)
 	_panel(Rect2(80, 641, 1120, 4), Color("233042"), 2)
-	_panel(Rect2(80, 641, 1120 * minf(session.clock / Session.DURATION, 1.0), 4), MINT, 2)
+	_panel(Rect2(80, 641, 1120 * minf(session.clock / session.duration, 1.0), 4), MINT, 2)
 
 func _draw_results() -> void:
 	_text(Vector2(80, 161), "PRACTICE STAMPED", 18, MINT)
 	_text(Vector2(76, 245), "YOU SHOWED UP.", 66)
 	_text(Vector2(82, 293), "Keep the rhythm. Come back for another round.", 24, MUTED)
-	var values := [str(session.score), "%d / 32" % session.hits, str(session.best_combo)]
+	var values := [str(session.score), "%d / %d" % [session.hits, session.chart.size()], str(session.best_combo)]
 	var labels := ["PRACTICE POINTS", "MATCHED NOTES", "BEST COMBO"]
 	for i in range(3):
 		_panel(Rect2(80 + i * 375, 340, 350, 133), Color("142131"))
 		_text(Vector2(102 + i * 375, 404), values[i], 45, MINT)
 		_text(Vector2(102 + i * 375, 449), labels[i], 16, MUTED)
 	_text(Vector2(82, 514), save_notice, 19, MUTED)
-	_text(Vector2(520, 605), "Simulation only. No official Full Combo or fitness record.", 18, MUTED)
+	_text(Vector2(900, 605), "SIMULATION ONLY", 18, MUTED)

@@ -8,6 +8,9 @@ const HIT_WINDOW := 0.18
 const DURATION := 36.0
 const ACTIONS := ["left_jab", "right_jab", "left_hook", "right_hook"]
 
+var duration := DURATION
+var chart_id := "demo-120-v1"
+var song_id := "demo"
 var state := State.READY
 var chart: Array[Dictionary] = []
 var cursor := 0
@@ -20,12 +23,19 @@ var misses := 0
 var attempts := 0
 var feedback := "READY"
 
-func start() -> void:
+func start(arrangement: Dictionary = {}) -> void:
 	chart.clear()
+	duration = float(arrangement.get("duration", DURATION))
+	chart_id = str(arrangement.get("id", "demo-120-v1"))
+	song_id = str(arrangement.get("song_id", "demo"))
 	# Fixed 120 BPM teaching pattern, with a four-second lead-in.
 	var pattern := [0, 1, 0, 1, 2, 1, 0, 3]
-	for i in range(32):
-		chart.append({"time": 4.0 + i, "action": ACTIONS[pattern[i % pattern.size()]]})
+	if arrangement.is_empty():
+		for i in range(32):
+			chart.append({"time": 4.0 + i, "action": ACTIONS[pattern[i % pattern.size()]]})
+	else:
+		for note in arrangement.notes:
+			chart.append(note.duplicate())
 	cursor = 0
 	clock = 0.0
 	score = 0
@@ -46,7 +56,7 @@ func advance(time: float) -> void:
 		combo = 0
 		feedback = "MISS"
 		cursor += 1
-	if clock >= DURATION:
+	if clock >= duration:
 		state = State.STAMP
 		feedback = "ONE LAST PUNCH"
 
@@ -93,6 +103,6 @@ func stamp() -> bool:
 	return true
 
 func result() -> Dictionary:
-	return {"mode": "simulation", "chart_id": "demo-120-v1", "score": score,
+	return {"mode": "simulation", "chart_id": chart_id, "song_id": song_id, "score": score,
 		"hits": hits, "misses": misses, "attempts": attempts, "best_combo": best_combo,
-		"duration_seconds": DURATION, "completed_at": Time.get_datetime_string_from_system(true)}
+		"duration_seconds": duration, "completed_at": Time.get_datetime_string_from_system(true)}

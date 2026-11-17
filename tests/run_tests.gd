@@ -87,5 +87,6 @@ func run() -> void:
 	await create_timer(0.1).timeout
 	app.queue_free()
 	await process_frame
+	await preload("res://tests/test_song_import.gd").run(self, check)
 	print("JabJam: %d checks, %d failures" % [checks, failures])
 	quit(0 if failures == 0 else 1)
