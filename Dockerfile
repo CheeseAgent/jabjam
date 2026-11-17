@@ -24,6 +24,7 @@ RUN set -eu; \
 RUN useradd --create-home --uid 1000 player
 WORKDIR /app
 COPY --chown=player:player . .
+RUN chown player:player /app
 USER player
 ENV XDG_DATA_HOME=/home/player/.local/share \
     XDG_CONFIG_HOME=/home/player/.config \

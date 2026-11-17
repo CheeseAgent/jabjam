@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - name: Build Linux validation image
         run: docker build --platform linux/amd64 -t jabjam-check .
       - name: Import, test, and boot the game
