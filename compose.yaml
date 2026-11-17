@@ -1,0 +1,9 @@
+services:
+  check:
+    build: .
+    platform: linux/amd64
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

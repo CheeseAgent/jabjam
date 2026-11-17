@@ -1,0 +1,16 @@
+name: Godot Linux checks
+on:
+  push:
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build Linux validation image
+        run: docker build --platform linux/amd64 -t jabjam-check .
+      - name: Import, test, and boot the game
+        run: docker run --rm --network none jabjam-check

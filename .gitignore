@@ -38,3 +38,10 @@ music/
 .env
 .env.*
 !.env.example
+
+# Godot generated cache and local verification/export output
+.godot/
+.runtime/
+build/
+*.zip
+
