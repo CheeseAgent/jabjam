@@ -117,7 +117,7 @@ def prepare(course, music, actions, tmp):
                        env=env, check=True, timeout=240)
     audio = generated if music == "builtin:demo" else music
     probe = subprocess.check_output(["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe",
-                                    "-select_streams", "a:0", "-show_entries", "stream=codec_name,duration:format_tags=title",
+                                    "-select_streams", "a:0", "-show_entries", "stream=codec_name,duration:stream_tags=title:format_tags=title",
                                     "-of", "json", str(audio)])
     metadata = json.loads(probe)
     streams = metadata["streams"]
@@ -133,9 +133,11 @@ def prepare(course, music, actions, tmp):
         notes = actions
     if notes[-1]["time"] >= duration:
         raise ValueError("Every punch must fall before the end of the music")
-    title = course.get("song_title") or metadata.get("format", {}).get("tags", {}).get("title")
+    # Vorbis stores tags on the audio stream; MP3 usually stores them on the container.
+    tags = {key.lower(): value for owner in (streams[0], metadata.get("format", {}))
+            for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
-    title = " ".join((title or "").split()) or fallback
+    title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
     return audio, duration, pace_notes(notes, course, actions == "auto"), title[:128]
 
 
