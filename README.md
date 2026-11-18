@@ -18,13 +18,13 @@ godot --path .
 
 有桌面、OpenGL 3.3 和音频输出的 Linux 电脑可以用上面的命令试玩。只有 SSH 的服务器可以做导入、规则和启动检查。项目没有 HTTP 服务或浏览器客户端，运行游戏也无需部署后端。
 
-在 Linux x86_64 安装上述 Godot 版本后执行一次：
+在 Linux x86_64 安装上述 Godot 版本后，如果只剩约 300 MB 内存，用轻量模式执行规则、导歌、场景和启动检查：
 
 ```sh
-sh scripts/verify.sh
+sh scripts/verify.sh --runtime-only
 ```
 
-也可使用 Docker Compose 运行同一套检查：`docker compose run --build --rm check`。仓库镜像面向 amd64；容器跑完即退出。2 核 2 GB 主机的资源预算、测量范围与构建方式见[开发指南](docs/development.md#小服务器运行预算)。
+完整检查还会启动 Godot 编辑器做资源导入，需要更多内存。仓库提供 amd64 镜像的构建配置，适合在其他机器构建后传到小服务器。256 MiB 限额的 Docker 命令和实测数据见[开发指南](docs/development.md#小服务器运行预算)。
 
 ## 接下来要验证什么
 

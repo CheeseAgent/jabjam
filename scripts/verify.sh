@@ -27,6 +27,10 @@ run_check() {
     fi
     if [ -n "$errors" ]; then return 1; fi
 }
-run_check import "$GODOT_BIN" --headless --path . --editor --import --quit
+case "$#:${1:-}" in
+    0:) run_check import "$GODOT_BIN" --headless --path . --editor --import --quit ;;
+    1:--runtime-only) ;; # This prototype loads its scripts and fixtures directly.
+    *) echo 'Usage: sh scripts/verify.sh [--runtime-only]' >&2; exit 2 ;;
+esac
 run_check tests "$GODOT_BIN" --headless --path . --script tests/run_tests.gd
 run_check boot "$GODOT_BIN" --headless --path . --quit-after 120
