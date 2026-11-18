@@ -4,9 +4,9 @@
 
 ## 在 GitHub Actions 生成视频
 
-1. 打开 **Actions → Render follow-along MP4**。工作流进入默认分支后，可用 **Run workflow** 选择分支并填入仓库内的课程 JSON 路径。开发中的合并请求也会自动运行示例课程。
+1. 打开 **Actions → Render follow-along MP4**。工作流进入默认分支后，可用 **Run workflow** 选择分支并填入课程 JSON 路径、画面上要显示的歌名、难度和最短拳间隔。歌名留空时自动读取歌曲标题。开发中的合并请求也会自动运行示例课程。
 2. 默认课程 `courses/neon-round.json` 使用项目合成的 37 秒音乐，由现有 Godot 节拍分析与动作编排生成谱面。要精确指定每一拳的时间，参考 `courses/four-punches.json`。
-3. 运行完成后，在该次 Actions 的 **Artifacts** 下载 `jabjam-follow-along-…`。解压后播放 `jabjam.mp4`。包内还有四种拳法的验收短片、从成片截出的对照图，以及三组课程的资源测试报告。
+3. 运行完成后，在该次 Actions 的 **Artifacts** 下载保留 **1 天** 的 `jabjam-follow-along-…`。解压后播放 `jabjam.mp4`。包内还有四种拳法的验收短片、从成片截出的对照图，以及三组课程的资源测试报告。
 
 构建依赖、排谱、渲染、编码和测试都可以在 GitHub 托管的 Linux runner 上完成。构建完成后，导出作业关闭容器网络。播放只需要成片，阿里云服务器无需参与。
 
@@ -15,7 +15,8 @@
 在装有 Godot 4.6.3 Standard、Python 3、Pillow、Noto CJK 字体、FFmpeg 和 ffprobe 的 Linux 环境中执行：
 
 ```sh
-python3 video/export.py courses/neon-round.json build/neon-round.mp4
+python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
+  --song-title "JabJam Demo Loop" --difficulty easy --min-gap 1.4
 ```
 
 输出为横屏 H.264 / AAC MP4。音乐在本地分析；左右直拳、左右勾拳、方块接近速度、配色、分辨率与帧率都由课程控制。课程字段、时间轴和测试口径见[视频导出指南](docs/video-export.md)。

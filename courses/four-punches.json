@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "course": {"title": "四种拳法", "music": "../tests/fixtures/pulse.ogg"},
+  "course": {"music": "../tests/fixtures/pulse.ogg"},
   "actions": [
     {"time": 4.0, "action": "left_jab"},
     {"time": 5.5, "action": "right_jab"},

@@ -7,15 +7,22 @@
 | 字段 | 作用 |
 | --- | --- |
 | `version` | 当前填整数 1。 |
-| `course.title` | 画面顶端的课程名，1 至 32 个字符。 |
+| `course.song_title` | 歌名，最多 128 个字符。调用时的 `--song-title` 优先，其次是这个字段、音频内嵌标题、文件名。内置曲名为 JabJam Demo Loop。标题也写入 MP4 元数据。旧配置里的课程名 `title` 可保留。 |
 | `course.music` | `builtin:demo` 生成原创演示音乐，也可填相对 **JSON 所在目录** 的本地 MP3、WAV 或 Ogg Vorbis 路径。导入范围为 8 秒至 10 分钟，最多 64 MiB。 |
 | `course.difficulty`、`course.bpm` | 自动编排可选，强度为 `easy` 或 `normal`，默认 normal。省略 BPM 会估拍，也可用 60–180 的数值覆盖估计。手工动作按给定时间播放。 |
+| `course.min_gap` | 可选，两次出拳之间至少留多少秒。命令行可用 `--min-gap` 覆盖，难度自带的下限始终生效。 |
 | `actions` | 默认 `"auto"`。手工编排填按时间递增的数组，例如 `[{"time":4.0,"action":"left_hook"},{"time":5.5,"action":"right_hook"}]`。动作名为 `left_jab`、`right_jab`、`left_hook`、`right_hook`。 |
 | `picture.size`、`picture.fps` | 默认 `[1280,720]` 和 24 fps。也支持 960×540、640×360，以及 25 / 30 fps。 |
 | `picture.approach_seconds` | 提前多少秒让方块出现，可设 0.7–4 秒，默认 2。开头不足预告时长的动作会在第一帧已经进入轨道。 |
-| `picture.left_color`、`picture.right_color` | 两侧轨道、方块、拳套及碎片使用的颜色，格式为 `#RRGGBB`。选择相互区分且与深色场景有对比的颜色。 |
+| `picture.left_color`、`picture.right_color` | 两侧轨道、方块及碎片使用的颜色，格式为 `#RRGGBB`。选择相互区分且与深色场景有对比的颜色。 |
 
 GitHub 托管任务只能访问该次检出和构建时包含的素材。示例使用仓库原创音频。自有歌曲可在持有该文件的机器或私有仓库使用；公共仓库示例选用可公开分发的音频。Docker 构建上下文受根目录 `.dockerignore` 约束。
+
+## 难度和出拳间隔
+
+Actions 的 `difficulty` 或命令行的 `--difficulty` 可覆盖课程难度。选 easy 时自动谱只排直拳，相邻拳至少 **1.10 秒**；normal 可包含勾拳，相邻拳至少 **0.70 秒**。上一动为勾拳或连续使用同一只手时，下限分别提高到 **1.35 秒** 和 **1.00 秒**。可按自己的回收节奏加长间隔，例如 `--min-gap 1.6`。这些数值是编排默认值，个人舒适的节奏会有差异。
+
+自动编排会跳过太密的候选拍点，并保持左右交替。手排模式保留作者指定的拳法与时刻，间隔太短时会报告相邻两个时刻和要求的间隔，再由作者调整。画面中的碎裂、光环和火花始终对应保留下来的拳点。
 
 ## 时间轴与导出
 

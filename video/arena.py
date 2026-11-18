@@ -10,7 +10,7 @@ WHITE = (240, 248, 252)
 DUSK = (135, 158, 181)
 HORIZON = 210
 HIT_Y = 510
-SHATTER = 0.46
+SHATTER = 0.58
 
 
 def blend(a, b, p):
@@ -65,6 +65,11 @@ class Arena:
         self.size = tuple(picture.get("size", [1280, 720]))
         self.colors = [ImageColor.getrgb(picture.get("left_color", "#63edce")),
                        ImageColor.getrgb(picture.get("right_color", "#ff916d"))]
+        self.halo = Image.new("L", (96, 96))
+        glow = ImageDraw.Draw(self.halo)
+        for radius in range(47, 0, -1):
+            glow.ellipse((48-radius, 48-radius, 48+radius, 48+radius),
+                         fill=round(155*(1-radius/48)**1.4))
         self.base = self.background(title)
 
     def background(self, title):
@@ -108,8 +113,12 @@ class Arena:
         text(im,(88,24),"JABJAM",30,WHITE,True)
         d.line((239,20,239,56),fill=(79,94,110))
         title_size=28
-        while font(title_size,True).getlength(title)>660:
+        while title_size > 18 and font(title_size,True).getlength(title)>660:
             title_size-=1
+        if font(title_size, True).getlength(title) > 660:
+            while font(title_size, True).getlength(title + "…") > 660:
+                title = title[:-1]
+            title += "…"
         text(im,(264,24),title,title_size,WHITE,True)
         text(im,(1234,31),"RHYTHM  /  BOXING",18,DUSK,True,"right")
         d.rectangle((0,632,1280,719),fill=(12,21,35))
@@ -139,55 +148,53 @@ class Arena:
         d.line((x-r*.72,y+r*.78,x+r*.72,y+r*.78),fill=blend(color,INK,.28),width=max(1,int(r*.05)))
         punch_icon(d,x,y-r*.06,r*.94,side,hook,INK)
 
-    def burst(self, d, side, hook, age, color):
-        x,y,r=self.position(side,1)
-        u=age/SHATTER
-        shade=blend(color,(37,54,70),u*.88)
-        if u<.65:
-            radius=70+110*u
-            d.ellipse((x-radius,y-radius*.77,x+radius,y+radius*.77),
-                      outline=blend(WHITE,(39,59,77),u/.65),width=max(1,round(5*(1-u))))
-        for i in range(12):
-            angle=(i+.18*sin(i*3))*2*pi/12
-            speed=90+28*(i%4)
-            dx,dy=cos(angle),sin(angle)
-            dist=25+speed*(1-(1-u)**2)
-            cx=x+dist*dx+(-side*22*u if hook else 0)
-            cy=y+dist*dy*.8+34*u*u
-            length=(29+8*(i%3))*(1-u)
-            width=(16+6*(i%2))*(1-u)
-            points=[(cx+dx*length,cy+dy*length),(cx-dy*width,cy+dx*width),
-                    (cx-dx*length*.7,cy-dy*length*.7),(cx+dy*width*.6,cy-dx*width*.6)]
-            d.polygon(points,fill=shade if i%3 else blend(shade,WHITE,.32*(1-u)))
-            if u<.68:
-                d.line((cx+dx*length*1.5,cy+dy*length*1.5,cx+dx*length*2.1,cy+dy*length*2.1),
-                       fill=shade,width=2)
+    def burst(self, im, d, side, hook, age, color):
+        x, y, _ = self.position(side, 1)
+        phase = min(1.0, age / SHATTER)
+        travel = 1 - (1 - phase) ** 2.6
+        heat = (1 - phase) ** 1.5
+        hot = blend(color, WHITE, .80)
+        drift = -side * 48 * travel if hook else 0
 
-    def glove(self,d,side,t,index):
-        # Guard -> extension at the note time -> recoil. Hooks swing in from the side.
-        extension=0
-        hook=False
-        for idx in range(max(0,index-2),min(len(self.notes),index+2)):
-            note=self.notes[idx]
-            if side != (-1 if note["action"].startswith("left") else 1):
-                continue
-            dt=t-note["time"]
-            phase=max(0,1-abs(dt)/(.25 if dt<0 else .31))
-            if phase>extension:
-                extension=phase
-                hook=note["action"].endswith("hook")
-        e=sin(extension*pi/2)**2
-        x=640+side*(440-173*e+(56*sin(pi*e) if hook else 0))
-        y=624-75*e+2*cos(t*2*pi)
-        c=self.colors[side>0]
-        def poly(points, fill):
-            d.polygon([(x+side*dx,y+dy) for dx,dy in points],fill=fill)
-        poly([(-39,19),(-23,-11),(22,-12),(96,48),(47,67)],blend(c,INK,.73))
-        poly([(-58,-43),(-33,-64),(9,-64),(41,-44),(47,-13),(27,14),(-14,23),(-51,6)],blend(c,INK,.20))
-        poly([(-57,-40),(-34,-61),(9,-61),(28,-47),(3,-39),(-37,-28)],blend(c,WHITE,.23))
-        poly([(-58,-34),(-39,-37),(-18,-13),(-23,8),(-46,2)],blend(c,INK,.46))
-        poly([(-18,19),(27,1),(56,22),(8,43)],(40,57,73))
-        poly([(-13,23),(27,8),(32,13),(-8,29)],c)
+        # A local bloom lights the rail, then two shock fronts peel away.
+        width = round(150 + 230 * travel)
+        mask = self.halo.resize((width, round(width * .76)))
+        im.paste(blend(INK, color, heat * .64), (round(x-width/2), round(y-mask.height/2),
+                 round(x-width/2)+width, round(y-mask.height/2)+mask.height), mask)
+        for radius, weight in ((52 + 158 * travel, 5), (42 + 115 * travel, 2)):
+            bounds = (x-radius, y-radius*.70, x+radius, y+radius*.70)
+            rim = blend((46, 68, 85), hot, heat)
+            for start in (12, 111, 197, 292):
+                d.arc(bounds, start, start + 62, fill=rim, width=max(1, round(weight * heat)))
+
+        # Faceted chunks tumble outwards; thinner streaks overtake them.
+        for i in range(22):
+            angle = 2*pi*i/22 + .12*sin(i*7)
+            dx, dy = cos(angle), sin(angle)
+            distance = 18 + (105 + (i*47 % 108))*travel
+            cx = x + dx*distance + drift
+            cy = y + dy*distance*.76 + 50*phase*phase
+            spin = angle + (1 if i % 2 else -1)*phase*(1+i%4)
+            ax, ay = cos(spin), sin(spin)
+            length = (21 + i*7 % 17)*(1-phase)
+            wing = length*(.28 + .09*(i%4))
+            tip = (cx+ax*length, cy+ay*length)
+            tail = (cx-ax*length, cy-ay*length)
+            left = (cx-ay*wing, cy+ax*wing)
+            right = (cx+ay*wing*.65, cy-ax*wing*.65)
+            d.polygon([tip, left, tail], fill=blend((45,63,81), color, heat))
+            d.polygon([tip, right, tail], fill=blend((48,68,85), hot, heat))
+            trail = distance + 18 + (i%3)*15
+            sx, sy = x + dx*trail + drift, y + dy*trail*.76
+            d.line((sx, sy, sx+dx*30*heat, sy+dy*23*heat), fill=blend(INK, hot, heat), width=2)
+        if phase < .4:
+            flare = (1-phase/.4)**2
+            star = []
+            for i in range(16):
+                angle = i*pi/8
+                length = (92 if i%4 == 0 else 52) if i%2 == 0 else 13
+                star.append((x+cos(angle)*length*flare, y+sin(angle)*length*flare*.8))
+            d.polygon(star, fill=hot)
 
     def frame(self,t):
         im=self.base.copy()
@@ -198,13 +205,11 @@ class Arena:
             note=self.notes[j]
             side=-1 if note["action"].startswith("left") else 1
             self.block(d,side,note["action"].endswith("hook"),1-(self.times[j]-t)/self.lead,self.colors[side>0])
-        for side in (-1,1):
-            self.glove(d,side,t,index)
         for j in range(bisect_left(self.times,t-SHATTER),index):
             note=self.notes[j]
             side=-1 if note["action"].startswith("left") else 1
-            self.burst(d,side,note["action"].endswith("hook"),t-self.times[j],self.colors[side>0])
-        # Clear the arena edge beneath the gloves; keep the instruction strip fixed.
+            self.burst(im,d,side,note["action"].endswith("hook"),t-self.times[j],self.colors[side>0])
+        # Clip the expanding shock fronts at the instruction strip.
         im.paste(self.base.crop((0,632,1280,720)),(0,632))
         if t < self.times[0] - self.lead:
             text(im,(640,295),"方块到线 · 跟拍空击",36,WHITE,True,"center")

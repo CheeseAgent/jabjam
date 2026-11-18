@@ -7,6 +7,17 @@ on:
         required: true
         default: courses/neon-round.json
         type: string
+      song_title:
+        description: 歌名（留空读取课程或音频标题）
+        type: string
+      difficulty:
+        description: 难度（course 沿用课程设置）
+        type: choice
+        options: [course, easy, normal]
+        default: course
+      min_gap:
+        description: 最短拳间隔（秒，留空使用课程设置）
+        type: string
   pull_request:
     paths:
       - 'video/**'
@@ -33,6 +44,9 @@ jobs:
     timeout-minutes: 20
     env:
       COURSE: ${{ inputs.course || 'courses/neon-round.json' }}
+      SONG_TITLE: ${{ inputs.song_title }}
+      DIFFICULTY: ${{ inputs.difficulty || 'course' }}
+      MIN_GAP: ${{ inputs.min_gap }}
     steps:
       - uses: actions/checkout@v5
       - name: Build the offline renderer
@@ -44,10 +58,15 @@ jobs:
           mkdir -p build/video
           limits=(--rm --network none --cpus 2 --memory 300000000 --memory-swap 300000000)
           mount=(--user "$(id -u):$(id -g)" -v "$PWD/build/video:/out")
+          docker run "${limits[@]}" jabjam-video python3 tests/test_video_pacing.py
+          options=()
+          if [[ -n "$SONG_TITLE" ]]; then options+=(--song-title "$SONG_TITLE"); fi
+          if [[ "$DIFFICULTY" != course ]]; then options+=(--difficulty "$DIFFICULTY"); fi
+          if [[ -n "$MIN_GAP" ]]; then options+=(--min-gap "$MIN_GAP"); fi
           docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/render_video_job.py "$COURSE" /out/jabjam.mp4
+            python3 tests/render_video_job.py "$COURSE" /out/jabjam.mp4 "${options[@]}"
           docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/render_video_job.py courses/four-punches.json /out/four-punches.mp4 --check-cues
+            python3 tests/render_video_job.py courses/four-punches.json /out/four-punches.mp4 --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4
           docker run "${limits[@]}" "${mount[@]}" jabjam-video sh -eu -c '
             ffmpeg -v error -stream_loop -1 -i tests/fixtures/pulse.ogg -t 180 \
               -ac 1 -ar 16000 -c:a pcm_s16le /tmp/three-minutes.wav
@@ -60,4 +79,4 @@ jobs:
           name: jabjam-follow-along-${{ github.run_id }}
           path: build/video/
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 1

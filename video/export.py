@@ -13,6 +13,9 @@ import time
 from arena import Arena, ACTIONS
 
 ROOT = Path(__file__).resolve().parents[1]
+# Seconds of recovery between two cues, measured on the music timeline.
+MIN_GAP = {"easy": 1.1, "normal": 0.7}
+RECOVERY_GAP = {"easy": 1.35, "normal": 1.0}
 
 
 def fields(obj, allowed, label):
@@ -27,13 +30,17 @@ def number(value, low, high, label):
     return value
 
 
-def config(path):
+def config(path, song_title=None, difficulty=None, min_gap=None):
     data = fields(json.loads(path.read_text()), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("Expected config version 1")
-    course = fields(data["course"], ("title", "music", "difficulty", "bpm"), "course")
-    if not isinstance(course.get("title"), str) or not 1 <= len(course["title"].strip()) <= 32:
-        raise ValueError("Use a course title of 1–32 characters")
+    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap"), "course")
+    if song_title is not None:
+        course["song_title"] = song_title
+    if "song_title" in course:
+        title = course["song_title"]
+        if not isinstance(title, str) or not 1 <= len(title.strip()) <= 128:
+            raise ValueError("Use a song title of 1–128 characters")
     music = course["music"]
     if not isinstance(music, str) or not music:
         raise ValueError("Expected a local music path or builtin:demo")
@@ -43,9 +50,12 @@ def config(path):
             raise ValueError("Expected a local MP3, WAV or Ogg Vorbis file")
         if not 16 <= music.stat().st_size <= 64 * 1024 * 1024:
             raise ValueError("Audio file must fit within 64 MiB")
-    difficulty = course.get("difficulty", "normal")
+    difficulty = difficulty or course.get("difficulty", "normal")
     if difficulty not in ("easy", "normal"):
         raise ValueError("difficulty must be easy or normal")
+    course["difficulty"] = difficulty
+    requested_gap = course.get("min_gap", MIN_GAP[difficulty]) if min_gap is None else min_gap
+    course["min_gap"] = max(MIN_GAP[difficulty], number(requested_gap, 0, 600, "min_gap"))
     if "bpm" in course:
         number(course["bpm"], 60, 180, "bpm")
     actions = data.get("actions", "auto")
@@ -73,6 +83,27 @@ def config(path):
     return course, music, actions, picture
 
 
+def pace_notes(notes, course, automatic):
+    """Retain beat positions; reject conflicts in an explicitly authored chart."""
+    kept = []
+    difficulty = course["difficulty"]
+    for note in notes:
+        if kept:
+            previous = kept[-1]
+            same_hand = previous["action"].split("_")[0] == note["action"].split("_")[0]
+            gap = course["min_gap"]
+            if same_hand or previous["action"].endswith("_hook"):
+                gap = max(gap, RECOVERY_GAP[difficulty])
+            if note["time"] - previous["time"] + 1e-9 < gap:
+                if automatic:
+                    continue
+                raise ValueError(f"Punch at {note['time']}s needs {gap:g}s after {previous['time']}s")
+            if automatic and same_hand:
+                continue
+        kept.append(note)
+    return kept
+
+
 def prepare(course, music, actions, tmp):
     generated = tmp / "demo.wav"
     chart_file = tmp / "auto.json"
@@ -86,9 +117,10 @@ def prepare(course, music, actions, tmp):
                        env=env, check=True, timeout=240)
     audio = generated if music == "builtin:demo" else music
     probe = subprocess.check_output(["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe",
-                                    "-select_streams", "a:0", "-show_entries", "stream=codec_name,duration",
+                                    "-select_streams", "a:0", "-show_entries", "stream=codec_name,duration:format_tags=title",
                                     "-of", "json", str(audio)])
-    streams = json.loads(probe)["streams"]
+    metadata = json.loads(probe)
+    streams = metadata["streams"]
     if not streams:
         raise ValueError("Audio track missing")
     if audio.suffix.lower() == ".ogg" and streams[0]["codec_name"] != "vorbis":
@@ -101,19 +133,22 @@ def prepare(course, music, actions, tmp):
         notes = actions
     if notes[-1]["time"] >= duration:
         raise ValueError("Every punch must fall before the end of the music")
-    return audio, duration, notes
+    title = course.get("song_title") or metadata.get("format", {}).get("tags", {}).get("title")
+    fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
+    title = " ".join((title or "").split()) or fallback
+    return audio, duration, pace_notes(notes, course, actions == "auto"), title[:128]
 
 
-def export(path, output):
-    course, music, actions, picture = config(path)
+def export(path, output, song_title=None, difficulty=None, min_gap=None):
+    course, music, actions, picture = config(path, song_title, difficulty, min_gap)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
     output.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         tmp = Path(folder).resolve()
-        audio, duration, notes = prepare(course, music, actions, tmp)
-        arena = Arena(course["title"], picture, notes, duration)
+        audio, duration, notes, title = prepare(course, music, actions, tmp)
+        arena = Arena(title, picture, notes, duration)
         size = picture.get("size", [1280, 720])
         fps = picture.get("fps", 24)
         temp_mp4 = tmp / "render.mp4"
@@ -122,7 +157,7 @@ def export(path, output):
                "-i", "pipe:0", "-protocol_whitelist", "file,pipe", "-i", str(audio), "-map", "0:v", "-map", "1:a:0",
                "-c:v", "libx264", "-threads:v", "1", "-preset", "veryfast", "-tune", "zerolatency",
                "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
-               "-t", str(duration), "-movflags", "+faststart", str(temp_mp4)]
+               "-metadata", f"title={title}", "-t", str(duration), "-movflags", "+faststart", str(temp_mp4)]
         with subprocess.Popen(cmd, stdin=subprocess.PIPE) as encoder:
             try:
                 for frame in range(math.ceil(duration * fps)):
@@ -134,6 +169,9 @@ def export(path, output):
                 encoder.kill()
                 raise
         os.replace(temp_mp4, output)
+    shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)
+    gap_text = f"{shortest:.3f}s" if shortest is not None else "n/a"
+    print(f"{title} [{course['difficulty']}], shortest interval {gap_text}")
     print(f"{output}: {size[0]}x{size[1]} @ {fps} fps, {duration:.2f}s, {len(notes)} punches, "
           f"exported in {time.monotonic() - started:.2f}s")
 
@@ -142,8 +180,11 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("config", type=Path)
     parser.add_argument("output", type=Path)
+    parser.add_argument("--song-title", help="Song name shown in the header and MP4 metadata")
+    parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
+    parser.add_argument("--min-gap", type=float, help="Minimum seconds between punches")
     args = parser.parse_args()
     try:
-        export(args.config, args.output)
+        export(args.config, args.output, args.song_title, args.difficulty, args.min_gap)
     except (OSError, KeyError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
         sys.exit(f"JabJam export failed: {exc}")

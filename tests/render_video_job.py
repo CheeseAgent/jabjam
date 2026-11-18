@@ -126,10 +126,17 @@ def main():
     p.add_argument("config",type=Path)
     p.add_argument("output",type=Path)
     p.add_argument("--check-cues",action="store_true",help="Check the four-punch regression fixture")
+    p.add_argument("--song-title")
+    p.add_argument("--difficulty", choices=("easy", "normal"))
+    p.add_argument("--min-gap", type=float)
     args=p.parse_args()
     config=json.loads(args.config.read_text())
     started=time.monotonic()
-    subprocess.run([sys.executable, str(ROOT/"video/export.py"), args.config, args.output],check=True)
+    cmd = [sys.executable, str(ROOT/"video/export.py"), args.config, args.output]
+    for flag, value in (("--song-title", args.song_title), ("--difficulty", args.difficulty), ("--min-gap", args.min_gap)):
+        if value is not None:
+            cmd.extend([flag, str(value)])
+    subprocess.run(cmd, check=True)
     elapsed=time.monotonic()-started
     peak=cgroup("memory.peak")
     report={"config":args.config.name,"elapsed_seconds":round(elapsed,2),"output_bytes":args.output.stat().st_size,
@@ -138,6 +145,10 @@ def main():
     music=config["course"]["music"]
     source=None if music=="builtin:demo" else args.config.parent/music
     duration=verify_course(args.output,config,source)
+    if args.song_title:
+        title = run("ffprobe", "-v", "error", "-show_entries", "format_tags=title",
+                    "-of", "default=nw=1:nk=1", args.output).decode().strip()
+        check(title == " ".join(args.song_title.split()), "Incorrect song title in MP4")
     if args.check_cues:
         check_choreography(args.output,config,source)
     report["duration_seconds"]=duration
