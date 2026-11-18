@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "course": {"title": "四种拳法", "music": "../tests/fixtures/pulse.ogg"},
+  "actions": [
+    {"time": 4.0, "action": "left_jab"},
+    {"time": 5.5, "action": "right_jab"},
+    {"time": 7.0, "action": "left_hook"},
+    {"time": 8.5, "action": "right_hook"},
+    {"time": 13.0, "action": "left_jab"},
+    {"time": 14.5, "action": "right_jab"},
+    {"time": 17.0, "action": "left_hook"},
+    {"time": 18.5, "action": "right_hook"}
+  ],
+  "picture": {"size": [960, 540], "fps": 24, "approach_seconds": 1.6,
+              "left_color": "#66e2cf", "right_color": "#ff9c70"}
+}
