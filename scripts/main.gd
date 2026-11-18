@@ -155,7 +155,7 @@ func _process(delta: float) -> void:
 		if session.state == Session.State.STAMP:
 			player.stop()
 			_sync_ui()
-	queue_redraw()
+		queue_redraw()
 
 func _notification(what: int) -> void:
 	if what == NOTIFICATION_APPLICATION_FOCUS_OUT and session.state == Session.State.PLAYING:
@@ -281,7 +281,10 @@ func _draw_training() -> void:
 	for index in range(session.cursor, session.chart.size()):
 		var note: Dictionary = session.chart[index]
 		var y := 480.0 - (float(note.time) - session.clock) * 75.0
-		if y < 235 or y > 510:
+		if y < 235:
+			# Notes are ordered by time. Every later note is still above the lanes.
+			break
+		if y > 510:
 			continue
 		var lane := LANES.find(note.action)
 		var x := 100.0 + lane * 190

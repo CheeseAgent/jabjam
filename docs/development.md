@@ -48,13 +48,28 @@ sh scripts/verify.sh
 
 测试覆盖正确/错误拳法、判定窗口、长帧漏判、暂停、时间不倒退、重开、完整模拟谱面、一次性盖章、持久化与坏文件恢复，以及真实主场景的键盘启动、音频暂停和界面状态切换。无界面模式使用 Dummy 显示和音频驱动，不能证明画面、实际音频延迟或触屏手感。
 
+## 小服务器运行预算
+
+2 vCPU / 2 GB 的 x86_64 Linux 服务器适合按需验证 JabJam。使用 SSH 即可，无需显卡、声卡、数据库或开放端口。想听音乐并操作游戏时，请在带显示与音频输出的电脑上启动客户端。
+
+在包含 `project.godot` 的原型分支，已安装 Godot 4.6.3 时可直接运行 `sh scripts/verify.sh`。使用仓库的 Compose 配置时，检查容器最多使用 2 个 CPU、1536 MiB 内存，不额外使用 swap。容器退出后释放资源。先看 `free -h` 的 available 列；若同机还跑着其他服务，原生运行可省去 Docker 构建。也可以在另一台 amd64 机器构建镜像，用 `docker save` / `docker load` 转移后再运行检查。构建不受检查容器的内存上限约束。
+
+2026-11-18 在 Linux x86_64、Godot 4.6.3 下给进程分配两个逻辑 CPU，得到以下单次测量：
+
+| 负载 | 耗时 | 峰值常驻内存 |
+| --- | ---: | ---: |
+| 编辑器导入、59 项检查和无界面启动（开发工作区） | 11.6 秒 | 683 MiB |
+| 首次导入一首 10 分钟、44.1 kHz、16 位单声道合成 PCM WAV（约 50.5 MiB，生成 597 个音符） | 2.1 秒 | 311 MiB |
+
+第一行记录顺序执行各进程中的最高 RSS，第二行只测一次导入进程。测量不包含系统和 Docker 开销，本地机器未限制整机内存。音频编码、已有曲库、宿主负载和磁盘都会影响结果。导入后会在曲库保留一份音频副本。桌面渲染、实际音频延迟及 Android 真机性能需另测。
+
 ## Docker
 
 Godot 可作为普通 Linux 程序在容器内运行。仓库默认让 Docker 负责**可重复的无界面验证**；启动游戏画面需要额外连接宿主桌面。
 
 ```sh
 docker build --platform linux/amd64 -t jabjam-dev .
-docker run --rm --network none jabjam-dev
+docker run --rm --network none --cpus=2 --memory=1536m --memory-swap=1536m jabjam-dev
 # 等价的 Compose 命令
 docker compose run --build --rm check
 ```
@@ -104,9 +119,7 @@ rm -f "$auth_file"
 
 真实硬件将来可提供同样的拳法信号，但仍需定义时间戳、置信度、掉线处理和可信输入认证，不能直接把当前模拟分数当正式成绩。自动谱面由音源内容哈希、算法版本和编排参数标识；模拟成绩绑定歌曲和谱面 ID，避免混淆不同编排的成绩。
 
-## 本次验证记录（2026-11-17）
+## 验证记录
 
-- Debian 13 x86_64、Godot 4.6.3：完成无界面导入、59 项规则/导歌/场景检查和启动验证，包含音频时间线推进及自动结束。
-- 当前沙箱禁止编辑器监听本地调试 socket，本地验证使用上述显式例外；规则/场景测试和启动检查没有放宽错误检查。
-- 本机 Docker socket 权限受限；改用 GitHub Actions 执行容器验证。基础版本容器构建与检查已通过，当前导歌功能继续使用严格引擎错误检查；最终容器检查结果以 [PR 检查记录](https://github.com/CheeseAgent/jabjam/pull/7/checks) 为准。
-- 当前没有可用桌面控制工具，未完成图形桌面、音频输出、Android 或 X11 转发实测。
+- 2026-11-17 的原型已通过 Linux Docker 构建、导入、59 项检查和启动验证。[GitHub Actions 记录](https://github.com/CheeseAgent/jabjam/actions/runs/44019594477)
+- 2026-11-18 的本地测量使用 `ALLOW_EDITOR_SOCKET_ERRORS=1` 放行沙箱禁止编辑器监听调试端口产生的两条错误；测试和启动阶段使用常规错误检查。容器检查状态见 [PR #7 检查记录](https://github.com/CheeseAgent/jabjam/pull/7/checks)。

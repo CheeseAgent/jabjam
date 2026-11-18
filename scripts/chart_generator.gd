@@ -15,6 +15,7 @@ static func analyze(stream: AudioStream, progress: Callable = Callable()) -> Dic
 	var frames := int(SAMPLE_RATE * STEP)
 	var scale := float(AudioServer.get_mix_rate()) / SAMPLE_RATE
 	var count := int(ceil(duration / STEP))
+	energy.resize(count)
 	for i in range(count):
 		if i % 50 == 0 and progress.is_valid() and not progress.call(float(i) / count):
 			playback.stop()
@@ -23,13 +24,14 @@ static func analyze(stream: AudioStream, progress: Callable = Callable()) -> Dic
 		var sum := 0.0
 		for sample in samples:
 			sum += (sample.x * sample.x + sample.y * sample.y) * 0.5
-		energy.append(sqrt(sum / maxi(1, samples.size())))
+		energy[i] = sqrt(sum / maxi(1, samples.size()))
 	playback.stop()
 	var peak := 0.0
 	var novelty := PackedFloat32Array()
+	novelty.resize(energy.size())
 	for i in range(energy.size()):
 		peak = maxf(peak, energy[i])
-		novelty.append(maxf(0.0, energy[i] - energy[maxi(0, i - 1)]))
+		novelty[i] = maxf(0.0, energy[i] - energy[maxi(0, i - 1)])
 	if peak < 0.001:
 		return {"error": "This file is silent or too quiet to arrange."}
 	# Autocorrelation over up to two minutes. Prefer the shorter period on ties.
