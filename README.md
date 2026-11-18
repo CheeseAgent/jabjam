@@ -1,6 +1,17 @@
 # JabJam · 音乐拳击跟练视频生成器
 
-选一首歌，生成一段可以在普通播放器打开的 MP4。跟练时面向屏幕，看方块沿左右轨道飞近，在它抵达击打线的音乐拍点空击。视频会在该拍点播放碎裂效果。左轨青色对应左手，右轨橙色对应右手；直箭头提示直拳，左摆拳箭头朝右、右摆拳朝左，J 形箭头提示上勾拳。地面出现带脚印的箭头时，跟着方向侧步。
+选一首歌，生成一段可以在普通播放器打开的 MP4。跟练时面向屏幕，看方块沿左右轨道飞近，在它抵达击打线的音乐拍点空击。视频会在该拍点播放碎裂效果。
+
+## 看懂八种动作
+
+左右按跟练者面向屏幕时的方向判断。默认左轨青色、右轨橙色。
+
+| 动作 | 左侧 JSON ID | 右侧 JSON ID | 看到什么、怎么跟 |
+| --- | --- | --- | --- |
+| 直拳 | `left_jab` | `right_jab` | 空中方块带直箭头，到线时用对应侧的手向前出拳。 |
+| 摆拳 | `left_hook` | `right_hook` | 箭头朝画面中间横弯：左摆拳向右，右摆拳向左。 |
+| 上勾拳 | `left_uppercut` | `right_uppercut` | J 形箭头从下向上挑，到线时跟着做上勾拳。 |
+| 侧步 | `step_left` | `step_right` | 脚印沿地面靠近，按箭头向左或向右迈步，在拍点落脚。 |
 
 ## 在 GitHub Actions 生成视频
 
@@ -20,6 +31,51 @@ python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
 ```
 
 输出为横屏 H.264 / AAC MP4。音乐在本地分析；拳法、侧步、方块接近速度、配色、分辨率与帧率都由课程控制。课程字段、时间轴和测试口径见[视频导出指南](docs/video-export.md)。
+
+## 写一份课程
+
+**自动编排**时，把 `actions` 设为 `"auto"`。`easy` 只排左右直拳；`normal` 默认排直拳和摆拳。想加入上勾拳和成对的侧步，在 `course` 里同时设置 `"difficulty": "normal"` 和 `"movement_set": "mixed"`。省略 `movement_set` 的旧课程沿用 `classic`。仓库的[默认课程](courses/neon-round.json)已经启用混合编排。
+
+**手排**时，在 `actions` 数组里写清每个动作及其相对音乐开头的秒数。下面是一份可直接导出的课程，用内置音乐先练左摆拳和右上勾拳，再向左侧步、向右回位：
+
+```json
+{
+  "version": 1,
+  "course": {"music": "builtin:demo", "difficulty": "normal"},
+  "actions": [
+    {"time": 4.0, "action": "left_hook"},
+    {"time": 6.0, "action": "right_uppercut"},
+    {"time": 8.0, "action": "step_left"},
+    {"time": 10.0, "action": "step_right"}
+  ]
+}
+```
+
+换歌时，把 `course.music` 改为相对这份 JSON 的 MP3、WAV 或 Ogg Vorbis 文件路径。想放慢节奏，可设置 `course.min_gap` 或在调用时传 `--min-gap`（秒）。导出器取用户设置和下表规则中的较大值。手排动作过密时，错误信息会指出要调整的两个时刻。
+
+| 相邻动作的最短间隔 | 入门 `easy` | 标准 `normal` |
+| --- | ---: | ---: |
+| 一般出拳 | 1.10 秒 | 0.70 秒 |
+| 摆拳或上勾拳之后，或连续使用同一只手 | 1.35 秒 | 1.00 秒 |
+| 侧步之前和之后 | 1.75 秒 | 1.50 秒 |
+
+## 接手代码时从哪里改
+
+| 要改的内容 | 入口 |
+| --- | --- |
+| 歌曲、时间点、课程动作顺序 | 照[八动作课程 JSON](courses/eight-moves.json)写一份课程即可。 |
+| 动作 ID、中文名、左右侧和类型 | 修改 [movements.py](video/movements.py) 的 `MOVEMENTS` 表。改显示名称只需改 `label`，已有课程仍按原 ID 读取。 |
+| 自动谱何时插入侧步、动作间隔 | 在 [choreography.py](video/choreography.py) 看 `arrange`（编排入口）、`mixed_round`（混合动作）及 `required_gap`（恢复间隔）。 |
+| 箭头、脚印和落地波纹 | 图形在 [cue_art.py](video/cue_art.py)；轨道位置、移动和击碎效果在 [arena.py](video/arena.py)。 |
+| 从配置到 MP4 的调用顺序 | 从 [export.py](video/export.py) 的 `export` 读起：读课程，准备音频和动作，绘制每一帧，交给 FFmpeg 编码。 |
+
+新增一种动作时，先登记 ID，用一份手排课程验证图标、方向和间隔，再按需加入自动编排。下面的命令可以检查规则、导出八动作样片，并从成片抽帧生成对照图：
+
+```sh
+python3 tests/test_video_pacing.py
+python3 video/export.py courses/eight-moves.json build/eight-moves.mp4
+python3 tests/check_eight_moves.py build/eight-moves.mp4
+```
 
 ## 早期交互原型
 
