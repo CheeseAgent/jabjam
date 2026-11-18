@@ -51,7 +51,7 @@ jobs:
       - uses: actions/checkout@v5
       - name: Build the offline renderer
         run: docker build --platform linux/amd64 --target video-export -t jabjam-video .
-      - name: Render and verify the selected course, four punches and a three-minute course
+      - name: Render and verify courses, movement fixtures and three-minute load test
         shell: bash
         run: |
           set -eu
@@ -67,6 +67,10 @@ jobs:
             python3 tests/render_video_job.py "$COURSE" /out/jabjam.mp4 "${options[@]}"
           docker run "${limits[@]}" "${mount[@]}" jabjam-video \
             python3 tests/render_video_job.py courses/four-punches.json /out/four-punches.mp4 --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4
+          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
+            python3 tests/render_video_job.py courses/eight-moves.json /out/eight-moves.mp4
+          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
+            python3 tests/check_eight_moves.py /out/eight-moves.mp4
           docker run "${limits[@]}" "${mount[@]}" jabjam-video sh -eu -c '
             ffmpeg -v error -stream_loop -1 -i tests/fixtures/pulse.ogg -t 180 \
               -ac 1 -ar 16000 -c:a pcm_s16le /tmp/three-minutes.wav

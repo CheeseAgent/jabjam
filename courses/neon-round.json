@@ -3,6 +3,7 @@
   "course": {
     "music": "builtin:demo",
     "difficulty": "normal",
+    "movement_set": "mixed",
     "bpm": 120
   },
   "actions": "auto",

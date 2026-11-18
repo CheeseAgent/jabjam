@@ -10,12 +10,11 @@ import sys
 import tempfile
 import time
 
-from arena import Arena, ACTIONS
+from arena import Arena
+from movements import MOVEMENTS
+from choreography import MIN_GAP, arrange
 
 ROOT = Path(__file__).resolve().parents[1]
-# Seconds of recovery between two cues, measured on the music timeline.
-MIN_GAP = {"easy": 1.1, "normal": 0.7}
-RECOVERY_GAP = {"easy": 1.35, "normal": 1.0}
 
 
 def fields(obj, allowed, label):
@@ -34,7 +33,9 @@ def config(path, song_title=None, difficulty=None, min_gap=None):
     data = fields(json.loads(path.read_text()), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("Expected config version 1")
-    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap"), "course")
+    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap", "movement_set"), "course")
+    if course.get("movement_set", "classic") not in ("classic", "mixed"):
+        raise ValueError("movement_set must be classic or mixed")
     if song_title is not None:
         course["song_title"] = song_title
     if "song_title" in course:
@@ -66,8 +67,8 @@ def config(path, song_title=None, difficulty=None, min_gap=None):
         for note in actions:
             fields(note, ("time", "action"), "note")
             t = number(note["time"], 0, 600, "note time")
-            if note["action"] not in ACTIONS or t <= last:
-                raise ValueError("Expected known punches with strictly increasing times")
+            if note["action"] not in MOVEMENTS or t <= last:
+                raise ValueError("Expected known actions with strictly increasing times")
             last = t
     picture = fields(data.get("picture", {}), ("size", "fps", "approach_seconds", "left_color", "right_color"), "picture")
     size = picture.get("size", [1280, 720])
@@ -81,27 +82,6 @@ def config(path, song_title=None, difficulty=None, min_gap=None):
         if key in picture and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(picture[key])):
             raise ValueError(f"{key} must be a #RRGGBB color")
     return course, music, actions, picture
-
-
-def pace_notes(notes, course, automatic):
-    """Retain beat positions; reject conflicts in an explicitly authored chart."""
-    kept = []
-    difficulty = course["difficulty"]
-    for note in notes:
-        if kept:
-            previous = kept[-1]
-            same_hand = previous["action"].split("_")[0] == note["action"].split("_")[0]
-            gap = course["min_gap"]
-            if same_hand or previous["action"].endswith("_hook"):
-                gap = max(gap, RECOVERY_GAP[difficulty])
-            if note["time"] - previous["time"] + 1e-9 < gap:
-                if automatic:
-                    continue
-                raise ValueError(f"Punch at {note['time']}s needs {gap:g}s after {previous['time']}s")
-            if automatic and same_hand:
-                continue
-        kept.append(note)
-    return kept
 
 
 def prepare(course, music, actions, tmp):
@@ -132,13 +112,13 @@ def prepare(course, music, actions, tmp):
     else:
         notes = actions
     if notes[-1]["time"] >= duration:
-        raise ValueError("Every punch must fall before the end of the music")
+        raise ValueError("Every action must fall before the end of the music")
     # Vorbis stores tags on the audio stream; MP3 usually stores them on the container.
     tags = {key.lower(): value for owner in (streams[0], metadata.get("format", {}))
             for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
     title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
-    return audio, duration, pace_notes(notes, course, actions == "auto"), title[:128]
+    return audio, duration, arrange(notes, course, actions == "auto"), title[:128]
 
 
 def export(path, output, song_title=None, difficulty=None, min_gap=None):
@@ -174,7 +154,7 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None):
     shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)
     gap_text = f"{shortest:.3f}s" if shortest is not None else "n/a"
     print(f"{title} [{course['difficulty']}], shortest interval {gap_text}")
-    print(f"{output}: {size[0]}x{size[1]} @ {fps} fps, {duration:.2f}s, {len(notes)} punches, "
+    print(f"{output}: {size[0]}x{size[1]} @ {fps} fps, {duration:.2f}s, {len(notes)} actions, "
           f"exported in {time.monotonic() - started:.2f}s")
 
 
@@ -184,7 +164,7 @@ if __name__ == "__main__":
     parser.add_argument("output", type=Path)
     parser.add_argument("--song-title", help="Song name shown in the header and MP4 metadata")
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
-    parser.add_argument("--min-gap", type=float, help="Minimum seconds between punches")
+    parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     args = parser.parse_args()
     try:
         export(args.config, args.output, args.song_title, args.difficulty, args.min_gap)

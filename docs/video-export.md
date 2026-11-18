@@ -2,7 +2,7 @@
 
 ## 如何写课程
 
-从 [自动编排示例](../courses/neon-round.json) 或 [手排四种拳法示例](../courses/four-punches.json) 复制一份 JSON。时间以音乐起点为零，单位为秒。一份配置对应一首歌、一条连续时间轴和一个视频文件。
+从 [自动编排示例](../courses/neon-round.json) 或 [手排八动作示例](../courses/eight-moves.json) 复制一份 JSON。时间以音乐起点为零，单位为秒。一份配置对应一首歌、一条连续时间轴和一个视频文件。
 
 | 字段 | 作用 |
 | --- | --- |
@@ -10,8 +10,9 @@
 | `course.song_title` | 歌名，最多 128 个字符。调用时的 `--song-title` 优先，其次是这个字段、音频内嵌标题、文件名。内置曲名为 JabJam Demo Loop。标题也写入 MP4 元数据。旧配置里的课程名 `title` 可保留。 |
 | `course.music` | `builtin:demo` 生成原创演示音乐，也可填相对 **JSON 所在目录** 的本地 MP3、WAV 或 Ogg Vorbis 路径。导入范围为 8 秒至 10 分钟，最多 64 MiB。 |
 | `course.difficulty`、`course.bpm` | 自动编排可选，强度为 `easy` 或 `normal`，默认 normal。省略 BPM 会估拍，也可用 60–180 的数值覆盖估计。手工动作按给定时间播放。 |
+| `course.movement_set` | 自动标准课程可选 `mixed` 加入上勾拳与左右侧步。省略或填 `classic` 沿用原来的拳谱。 |
 | `course.min_gap` | 可选，两次出拳之间至少留多少秒。命令行可用 `--min-gap` 覆盖，难度自带的下限始终生效。 |
-| `actions` | 默认 `"auto"`。手工编排填按时间递增的数组，例如 `[{"time":4.0,"action":"left_hook"},{"time":5.5,"action":"right_hook"}]`。动作名为 `left_jab`、`right_jab`、`left_hook`、`right_hook`。 |
+| `actions` | 默认 `"auto"`。手工编排填按时间递增的数组，例如 `[{"time":4.0,"action":"left_hook"},{"time":5.5,"action":"right_hook"}]`。直拳为 `left_jab`、`right_jab`，摆拳为 `left_hook`、`right_hook`，上勾拳为 `left_uppercut`、`right_uppercut`，侧步为 `step_left`、`step_right`。 |
 | `picture.size`、`picture.fps` | 默认 `[1280,720]` 和 24 fps。也支持 960×540、640×360，以及 25 / 30 fps。 |
 | `picture.approach_seconds` | 提前多少秒让方块出现，可设 0.7–4 秒，默认 2。开头不足预告时长的动作会在第一帧已经进入轨道。 |
 | `picture.left_color`、`picture.right_color` | 两侧轨道、方块及碎片使用的颜色，格式为 `#RRGGBB`。选择相互区分且与深色场景有对比的颜色。 |
@@ -20,13 +21,15 @@ GitHub 托管任务只能访问该次检出和构建时包含的素材。示例�
 
 ## 难度和出拳间隔
 
-Actions 的 `difficulty` 或命令行的 `--difficulty` 可覆盖课程难度。选 easy 时自动谱只排直拳，相邻拳至少 **1.10 秒**；normal 可包含勾拳，相邻拳至少 **0.70 秒**。上一动为勾拳或连续使用同一只手时，下限分别提高到 **1.35 秒** 和 **1.00 秒**。可按自己的回收节奏加长间隔，例如 `--min-gap 1.6`。这些数值是编排默认值，个人舒适的节奏会有差异。
+Actions 的 `difficulty` 或命令行的 `--difficulty` 可覆盖课程难度。选 easy 时自动谱只排直拳，相邻拳至少 **1.10 秒**；normal 可包含勾拳，相邻拳至少 **0.70 秒**。上一动为摆拳、上勾拳或连续使用同一只手时，下限分别提高到 **1.35 秒** 和 **1.00 秒**。可按自己的回收节奏加长间隔，例如 `--min-gap 1.6`。这些数值是编排默认值，个人舒适的节奏会有差异。
+
+每次侧步前后至少留 **1.75 秒（入门）／1.50 秒（标准）**，课程设置的更长间隔优先。混合自动谱按原曲拍点编排侧移再回位，足够长的乐段才会出现一对侧步。手排课程可直接指定每一步。
 
 自动编排会跳过太密的候选拍点，并保持左右交替。手排模式保留作者指定的拳法与时刻，间隔太短时会报告相邻两个时刻和要求的间隔，再由作者调整。画面中的碎裂、光环和火花始终对应保留下来的拳点。
 
 ## 时间轴与导出
 
-自动模式在独立 Godot 无界面进程中调用原有 `SongLibrary.import_song`，得到动作及时间戳。手工模式直接使用 JSON 时间戳。以每帧的音频时间计算方块位置：远端出现、沿透视轨道放大、到线、裂成碎片。若拍点落在两帧之间，第一帧时间大于等于拍点时开始碎裂，24 fps 下量化误差小于 42 ms。左勾拳在左轨向右弯，右勾拳在右轨向左弯。
+自动模式在独立 Godot 无界面进程中调用原有 `SongLibrary.import_song`，得到动作及时间戳。手工模式直接使用 JSON 时间戳。以每帧的音频时间计算方块位置：远端出现、沿透视轨道放大、到线、裂成碎片。若拍点落在两帧之间，第一帧时间大于等于拍点时开始碎裂，24 fps 下量化误差小于 42 ms。左摆拳在左轨向右弯，右摆拳在右轨向左弯。上勾拳使用向上挑的 J 形箭头；侧步用地面脚印和向外箭头，到拍点脚印落地并出现波纹。
 
 Python 用 Pillow 逐帧绘制，FFmpeg 从管道读取 RGB 并混入原曲音轨。内存中只保留当前画面与有限的字形图像。导出写入同一输出目录下的临时文件，编码成功后才替换目标 MP4。临时曲库和中间文件随任务结束清理。
 
@@ -39,3 +42,18 @@ Python 用 Pillow 逐帧绘制，FFmpeg 从管道读取 RGB 并混入原曲音�
 - 媒体验证检查 H.264 / AAC、分辨率、帧数、起止时间及音轨信号。手排样片还对比两个时点的原曲和导出音频波形。
 
 这些样例覆盖指定时长、帧率与素材。编解码器、声道数及源文件大小也会影响峰值，配置允许导入的最长文件仍需按实际素材测试。
+
+
+## 接手代码时从哪里开始
+
+| 想改什么 | 文件与入口 |
+| --- | --- |
+| 动作 ID、中文名、左右侧、类型 | [movements.py](../video/movements.py) 的 `MOVEMENTS`。课程 JSON 引用这里的 ID；已有 ID 要继续能读。 |
+| 最短间隔、哪些拍点适合插入侧步 | [choreography.py](../video/choreography.py)。`required_gap` 同时服务手排和自动谱；`arrange` 接收带时间戳的音符，返回成片使用的动作。 |
+| 箭头、脚印长什么样 | [cue_art.py](../video/cue_art.py)。拳块正面从 `PUNCH_SHAPES` 取形状；脚印和落地波纹分别在 `foot_pad`、`step_landing`。 |
+| 轨道、透视、击碎反馈 | [arena.py](../video/arena.py) 的 `Arena.frame` 按时间和动作类型画一帧。 |
+| 运行整个流程 | [export.py](../video/export.py) 读课程、调用原有 Godot 分析、交给 `arrange`、逐帧编码。 |
+
+例如只想把「左摆拳」改个显示名字，在动作表里改 `label` 即可。添加一种全新动作时，先在动作表登记，再给它手排一个拍点、补图标和间隔测试；需要自动生成时才改 `arrange` 所调用的编排规则。
+
+在仓库根目录运行 `python3 tests/test_video_pacing.py` 检查规则。运行 `python3 video/export.py courses/eight-moves.json build/eight-moves.mp4`，再执行 `python3 tests/check_eight_moves.py build/eight-moves.mp4`，可从成片验证上勾拳和侧步并得到八动作对照图。

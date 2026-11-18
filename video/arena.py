@@ -4,7 +4,9 @@ from functools import lru_cache
 from math import cos, pi, sin
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
-ACTIONS = {"left_jab": "左直拳", "right_jab": "右直拳", "left_hook": "左勾拳", "right_hook": "右勾拳"}
+from movements import MOVEMENTS, LEFT
+from cue_art import punch_icon, foot_pad, step_landing
+
 INK = (11, 21, 36)
 WHITE = (240, 248, 252)
 DUSK = (135, 158, 181)
@@ -42,20 +44,6 @@ def text(im, xy, value, size, color=WHITE, bold=False, align="left"):
     im.paste(label, (round(x), round(y)), mask)
 
 
-def punch_icon(draw, x, y, radius, side, hook, color):
-    # Arrow is cut into the front face. Hooks turn from the outside towards centre.
-    if hook:
-        points = [(.65, .65), (.16, .65), (-.18, .42), (-.26, .02),
-                  (-.26, -.10), (-.66, -.10), (-.10, -.77), (.49, -.10),
-                  (.10, -.10), (.10, .10), (.20, .26), (.65, .26)]
-        # The tip points across the body; rotate the bent arrow around the tile.
-        points = [(side * b, a) for a, b in points]
-    else:
-        points = [(-.22, .70), (.22, .70), (.22, -.05), (.57, -.05),
-                  (0, -.78), (-.57, -.05), (-.22, -.05)]
-    draw.polygon([(x + a*radius, y + b*radius) for a, b in points], fill=color)
-
-
 class Arena:
     def __init__(self, title, picture, notes, duration):
         self.notes = notes
@@ -70,6 +58,7 @@ class Arena:
         for radius in range(47, 0, -1):
             glow.ellipse((48-radius, 48-radius, 48+radius, 48+radius),
                          fill=round(155*(1-radius/48)**1.4))
+        self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
         self.base = self.background(title)
 
     def background(self, title):
@@ -125,7 +114,7 @@ class Arena:
         for sign,color in zip((-1,1),self.colors):
             x=42 if sign<0 else 1055
             d.rounded_rectangle((x,651,x+9,690),radius=4,fill=color)
-            text(im,(x+22,657),"左手  /  LEFT" if sign<0 else "右手  /  RIGHT",20,color,True)
+            text(im,(x+22,657),"左侧  /  LEFT" if sign<0 else "右侧  /  RIGHT",20,color,True)
         return im
 
     @staticmethod
@@ -133,7 +122,8 @@ class Arena:
         p=.25*u+.75*u*u
         return 640+side*(23+232*p), HORIZON+300*p, 11+58*p
 
-    def block(self, d, side, hook, u, color):
+    def block(self, d, move, u, color):
+        side = move.side
         x,y,r = self.position(side,u)
         depth=r*.32
         # Back edges point towards the vanishing point.
@@ -146,7 +136,7 @@ class Arena:
         d.rounded_rectangle((x-r,y-r,x+r,y+r),radius=max(1,int(r*.12)),fill=color,
                             outline=blend(color,WHITE,.70),width=max(1,int(r*.05)))
         d.line((x-r*.72,y+r*.78,x+r*.72,y+r*.78),fill=blend(color,INK,.28),width=max(1,int(r*.05)))
-        punch_icon(d,x,y-r*.06,r*.94,side,hook,INK)
+        punch_icon(d,x,y-r*.06,r*.94,move,INK)
 
     def burst(self, im, d, side, hook, age, color):
         x, y, _ = self.position(side, 1)
@@ -201,27 +191,39 @@ class Arena:
         d=ImageDraw.Draw(im)
         index=bisect_right(self.times,t)
         end=bisect_right(self.times,t+self.lead)
-        for j in range(end-1,index-1,-1):
-            note=self.notes[j]
-            side=-1 if note["action"].startswith("left") else 1
-            self.block(d,side,note["action"].endswith("hook"),1-(self.times[j]-t)/self.lead,self.colors[side>0])
-        for j in range(bisect_left(self.times,t-SHATTER),index):
-            note=self.notes[j]
-            side=-1 if note["action"].startswith("left") else 1
-            self.burst(im,d,side,note["action"].endswith("hook"),t-self.times[j],self.colors[side>0])
-        # Clip the expanding shock fronts at the instruction strip.
+        for j in range(end - 1, index - 1, -1):
+            move = MOVEMENTS[self.notes[j]["action"]]
+            color = self.colors[0 if move.side == LEFT else 1]
+            progress = 1 - (self.times[j] - t) / self.lead
+            if move.kind == "step":
+                x, y, radius = self.position(move.side, progress)
+                foot_pad(d, x, y + radius, radius, move, color)
+            else:
+                self.block(d, move, progress, color)
+        for j in range(bisect_left(self.times, t - SHATTER), index):
+            move = MOVEMENTS[self.notes[j]["action"]]
+            color = self.colors[0 if move.side == LEFT else 1]
+            age = t - self.times[j]
+            if move.kind == "step":
+                x, y, radius = self.position(move.side, 1)
+                step_landing(d, x, y + radius, radius, move, color, age / SHATTER)
+            else:
+                self.burst(im, d, move.side, move.kind == "hook", age, color)
         im.paste(self.base.crop((0,632,1280,720)),(0,632))
         if t < self.times[0] - self.lead:
-            text(im,(640,295),"方块到线 · 跟拍空击",36,WHITE,True,"center")
-            text(im,(640,352),"直箭头打直拳   /   弯箭头打勾拳",20,DUSK,False,"center")
-        if index and t-self.times[index-1]<.25:
-            label="击打  /  "+ACTIONS[self.notes[index-1]["action"]]
-        elif index<len(self.notes):
-            label="准备  /  "+ACTIONS[self.notes[index]["action"]]
+            text(im,(640,295),"跟随拍点 · 准备开始",36,WHITE,True,"center")
+            text(im,(640,352),"直箭头打直拳   /   横弯打摆拳   /   上挑打上勾拳",20,DUSK,False,"center")
+        if index and t - self.times[index - 1] < .25:
+            move = MOVEMENTS[self.notes[index - 1]["action"]]
+            verb = "落步" if move.kind == "step" else "击打"
+            label = f"{verb}  /  {move.label}"
+        elif index < len(self.notes):
+            label = "准备  /  " + MOVEMENTS[self.notes[index]["action"]].label
         else:
-            label="收拳  /  放松"
+            label = "收势  /  放松"
         text(im,(640,650),label,26,WHITE,True,"center")
-        text(im,(640,692),"方块到线时出拳",15,DUSK,False,"center")
+        hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
+        text(im,(640,692),hint,15,DUSK,False,"center")
         elapsed=int(t)
         text(im,(42,104),f"{elapsed//60:02d}:{elapsed%60:02d}",25,WHITE,True)
         text(im,(1234,106),f"{index:02d}  /  {len(self.notes):02d}",22,DUSK,True,"right")

@@ -4,7 +4,9 @@ import sys
 import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "video"))
-from export import config, pace_notes
+from export import config
+from choreography import arrange, pace_notes
+from movements import MOVEMENTS
 
 
 class VideoPacing(unittest.TestCase):
@@ -27,6 +29,36 @@ class VideoPacing(unittest.TestCase):
                 notes[1]["time"] -= .001
                 with self.assertRaisesRegex(ValueError, "needs"):
                     pace_notes(notes, self.course, False)
+
+    def test_step_needs_recovery_on_both_sides_of_beat(self):
+        for difficulty, gap in [("easy", 1.75), ("normal", 1.5)]:
+            course = dict(self.course, difficulty=difficulty)
+            for first, second in [("left_jab", "step_right"), ("step_left", "right_uppercut"),
+                                  ("step_left", "step_right")]:
+                notes = [{"time": 3.0, "action": first}, {"time": 3.0 + gap, "action": second}]
+                self.assertEqual(arrange(notes, course, False), notes)
+                notes[1]["time"] -= .01
+                with self.assertRaisesRegex(ValueError, "needs"):
+                    arrange(notes, course, False)
+        notes = [{"time": 3, "action": "left_uppercut"}, {"time": 3.9, "action": "right_jab"}]
+        with self.assertRaisesRegex(ValueError, "needs"):
+            arrange(notes, self.course, False)
+
+    def test_mixed_round_reuses_beats_and_balances_steps(self):
+        pattern = ["left_jab", "right_jab", "left_hook", "right_hook"]
+        original = [{"time": 3 + i, "action": pattern[i % 4]} for i in range(48)]
+        mixed = dict(self.course, movement_set="mixed")
+        result = arrange(original, mixed, True)
+        self.assertEqual(result, arrange(original, mixed, True))
+        self.assertTrue(all(n["time"] in range(3, 51) for n in result))
+        self.assertEqual({n["action"] for n in result}, set(MOVEMENTS))
+        steps = [n["action"] for n in result if MOVEMENTS[n["action"]].kind == "step"]
+        self.assertEqual(steps, ["step_left", "step_right", "step_right", "step_left"])
+        self.assertEqual(result, pace_notes(result, mixed, False))
+        self.assertEqual(arrange(original, self.course, True), original)
+        self.assertEqual(arrange(original, mixed, False), original)
+        easy = [{"time": 3 + 2*i, "action": pattern[i % 2]} for i in range(48)]
+        self.assertEqual(arrange(easy, dict(mixed, difficulty="easy"), True), easy)
 
     def test_runtime_overrides_cannot_lower_the_floor(self):
         path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
