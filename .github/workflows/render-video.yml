@@ -18,6 +18,9 @@ on:
       min_gap:
         description: 最短拳间隔（秒，留空使用课程设置）
         type: string
+      beat_offset_ms:
+        description: 自动谱拍点校准（毫秒，-250 到 +250；正数延后）
+        type: string
   pull_request:
     paths:
       - 'video/**'
@@ -47,6 +50,7 @@ jobs:
       SONG_TITLE: ${{ inputs.song_title }}
       DIFFICULTY: ${{ inputs.difficulty || 'course' }}
       MIN_GAP: ${{ inputs.min_gap }}
+      BEAT_OFFSET_MS: ${{ inputs.beat_offset_ms }}
     steps:
       - uses: actions/checkout@v5
       - name: Build the offline renderer
@@ -63,6 +67,7 @@ jobs:
           if [[ -n "$SONG_TITLE" ]]; then options+=(--song-title "$SONG_TITLE"); fi
           if [[ "$DIFFICULTY" != course ]]; then options+=(--difficulty "$DIFFICULTY"); fi
           if [[ -n "$MIN_GAP" ]]; then options+=(--min-gap "$MIN_GAP"); fi
+          if [[ -n "$BEAT_OFFSET_MS" ]]; then options+=(--beat-offset-ms "$BEAT_OFFSET_MS"); fi
           docker run "${limits[@]}" "${mount[@]}" jabjam-video \
             python3 tests/render_video_job.py "$COURSE" /out/jabjam.mp4 "${options[@]}"
           docker run "${limits[@]}" "${mount[@]}" jabjam-video \
