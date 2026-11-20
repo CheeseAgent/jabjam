@@ -105,6 +105,7 @@ jobs:
           if [[ "$VERIFY_SAMPLES" != true ]]; then exit 0; fi
           echo "::group::Pacing and authoring tests"
           offline python3 tests/test_video_pacing.py
+          offline python3 tests/test_coach_avatar.py
           echo "::endgroup::"
 
           echo "::group::Four-punch waveform and eight-movement frames"

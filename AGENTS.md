@@ -33,3 +33,10 @@ python3 tests/check_eight_moves.py build/eight-moves.mp4
 ```
 
 课程 JSON 的动作 ID 和以原曲起点计算的秒数也是导出接口。调整动作显示名时改 `label`，让已有课程仍可用同一 ID 打开。自动编排、内置曲的生成还会用到 Godot 4.6.3。
+
+## 全身小奶茶教练（可选渲染层）
+
+独立的绝对时间姿势逻辑在 `video/coach_timeline.py`；绘画后端在 `video/coach_avatar.py`。
+课程 `picture.coach.enabled=true` 才开启，未配置的旧课程保持原状。
+从 `courses/coach-demo.json`、`docs/coach-avatar.md` 和 `assets/coaches/README.md` 接手。
+运行 `python3 tests/test_coach_avatar.py` 后再生成八动作样片；不要为了角色动画改编舞时间。

@@ -88,3 +88,9 @@ python3 video/export.py build/my-round.json build/my-round.mp4
 ## 早期交互原型
 
 Godot 互动工程仍可以独立运行。导出器直接复用它的导歌及编排实现，成片播放与动作计分彼此独立。[原型运行指南](docs/development.md) · [游戏设计历史](docs/game-design-vision.md) · [引擎选型记录](docs/decisions/0001-game-engine-godot.md)
+
+## 🐰 全身小奶茶教练（实验性可选）
+
+用 `courses/coach-demo.json` 生成带全身兔子示意教练的八动作短片。原课程不受影响。
+第一阶段使用程序绘制的占位兔子；透明 PNG 精灵图可通过独立皮肤包替换，**尚未提供正式小奶茶人物素材**。
+接手架构、DSF 待办、测试和素材规范见 [教练交接文档](docs/coach-avatar.md)。

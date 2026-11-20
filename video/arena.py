@@ -7,6 +7,7 @@ from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
+from coach_avatar import CoachLayer
 
 INK = (11, 21, 36)
 WHITE = (240, 248, 252)
@@ -63,6 +64,7 @@ class Arena:
                          fill=round(155*(1-radius/48)**1.4))
         self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
         self.base = self.background(title)
+        self.coach = CoachLayer(notes, picture.get("coach", {}))
 
     def skyline(self, im, d):
         # All skyline lights and the graduated solar disc are painted once per course.
@@ -291,6 +293,7 @@ class Arena:
                 step_landing(d, x, y + radius, radius, move, color, age / SHATTER)
             else:
                 self.burst(im, d, move.side, move.kind == "hook", age, color)
+        self.coach.draw(im, t)
         im.paste(self.base.crop((0,632,1280,720)),(0,632))
         if t < self.times[0] - self.lead:
             text(im,(640,295),"跟随拍点 · 准备开始",36,WHITE,True,"center")

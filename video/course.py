@@ -4,6 +4,7 @@ import re
 
 from choreography import MIN_GAP, arrange
 from movements import MOVEMENTS
+from coach_timeline import validate_coach_config
 
 SCENES = ("neon", "classic")
 
@@ -53,7 +54,7 @@ def read_actions(actions):
 
 
 def read_picture(picture, scene):
-    fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene"), "picture")
+    fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach"), "picture")
     if scene is not None:
         picture["scene"] = scene
     if picture.get("scene", "neon") not in SCENES:
@@ -68,6 +69,8 @@ def read_picture(picture, scene):
     for key in ("left_color", "right_color"):
         if key in picture and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(picture[key])):
             raise ValueError(f"picture.{key} must be a #RRGGBB color")
+    if "coach" in picture:
+        validate_coach_config(picture["coach"])
     return picture
 
 
