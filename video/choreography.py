@@ -66,6 +66,39 @@ def mixed_round(notes, course):
 
 
 
+# A small coaching vocabulary, not isolated random punches. Entries can be extended
+# without changing rendering, course schemas, or chart caching.
+# 直 = jab/straight, 摆 = hook, 勾 = uppercut; each pattern is mirrored.
+PADWORK_COMBOS = {
+    "warmup": (
+        ("straight_pair", "直直", ("jab", "jab")),
+        ("jab_hook", "直摆", ("jab", "hook")),
+    ),
+    "steady": (
+        ("jab_jab_hook", "直直摆", ("jab", "jab", "hook")),
+        ("jab_jab_uppercut", "直直勾", ("jab", "jab", "uppercut")),
+        ("jab_hook_jab", "直摆直", ("jab", "hook", "jab")),
+        ("jab_uppercut_jab", "直勾直", ("jab", "uppercut", "jab")),
+        ("jab_jab_hook_jab", "直直摆直", ("jab", "jab", "hook", "jab")),
+        ("jab_jab_uppercut_jab", "直直勾直", ("jab", "jab", "uppercut", "jab")),
+    ),
+    "peak": (
+        ("jab_jab_hook_uppercut_jab", "直直摆勾直",
+         ("jab", "jab", "hook", "uppercut", "jab")),
+        ("jab_jab_hook_jab_uppercut", "直直摆直勾",
+         ("jab", "jab", "hook", "jab", "uppercut")),
+        ("jab_uppercut_jab_hook_jab", "直勾直摆直",
+         ("jab", "uppercut", "jab", "hook", "jab")),
+        ("jab_jab_uppercut_hook_jab", "直直勾摆直",
+         ("jab", "jab", "uppercut", "hook", "jab")),
+        ("jab_hook_jab_uppercut_jab", "直摆直勾直",
+         ("jab", "hook", "jab", "uppercut", "jab")),
+        ("jab_jab_hook_jab_hook", "直直摆直摆",
+         ("jab", "jab", "hook", "jab", "hook")),
+    ),
+}
+
+
 def _percentile(values, fraction):
     if not values:
         return 0.0
@@ -73,12 +106,36 @@ def _percentile(values, fraction):
     return ordered[round((len(ordered) - 1) * fraction)]
 
 
-def padwork_round(notes, course, chart):
-    """Write complete coach-style combinations onto a fixed beat grid.
+def _combo_cues(template, start_time, start_hand, period, course):
+    """Place the entire combo on beats, using actual action recovery times."""
+    from math import ceil
+    key, label, kinds = template
+    built = []
+    beat_offset = 0
+    for index, kind in enumerate(kinds):
+        side = "left" if (start_hand + index) % 2 == 0 else "right"
+        action = f"{side}_{kind}"
+        if built:
+            last = MOVEMENTS[built[-1]["action"]]
+            gap = required_gap(last, MOVEMENTS[action], course)
+            beat_offset += max(1, ceil((gap - 1e-9) / period))
+        elif len(kinds) <= 2:
+            # No extra delay on the first cue; the first two hits can be slower.
+            beat_offset = 0
+        built.append({"time": round(start_time + beat_offset * period, 3),
+                      "action": action, "combo_name": label,
+                      "combo_id": key, "combo_step": index + 1,
+                      "combo_total": len(kinds)})
+    return built, beat_offset
 
-    This uses the V2 tempo / energy estimate, not a claim of detected downbeats.
-    All spacing is in whole beats so a five-hit phrase stays a unit instead of
-    having individual punches deleted by the generic pacing filter.
+
+def padwork_round(notes, course, chart):
+    """Select a short repertoire of repeated, mirrored mitt-work combinations.
+
+    A template repeats twice, first lead-left then lead-right, before rotating.
+    Music energy controls which repertoire is used. Template changes happen
+    between phrases, never inside a phrase. Tempo is still a global estimate,
+    not a verified downbeat tracker.
     """
     from math import atan2, ceil, cos, pi, sin
 
@@ -89,9 +146,6 @@ def padwork_round(notes, course, chart):
         raise ValueError("Padwork requires a valid auto-chart BPM")
     period = 60.0 / bpm
 
-    # V2's onset-snapped notes all originate from the same tempo grid.
-    # Circular averaging avoids a wrap at 0 / period and uses the calibrated
-    # notes, so beat_offset_ms is respected.
     angles = [2 * pi * (note["time"] % period) / period for note in notes[:32]]
     phase = (atan2(sum(sin(a) for a in angles), sum(cos(a) for a in angles))
              % (2 * pi)) / (2 * pi) * period
@@ -100,67 +154,52 @@ def padwork_round(notes, course, chart):
     if not sections:
         return pace_notes(notes, course, True)
     levels = [s.get("intensity", s.get("energy", 0.0)) for s in sections]
-    active = [v for v in levels if v >= 0.09]
-    high_cut = max(0.58, _percentile(active, 0.60))
-    # Use a stable floor for teaching triples even when most of the song is loud.
+    high_cut = max(0.58, _percentile([v for v in levels if v >= 0.09], 0.60))
     mid_cut = 0.28
 
-    # Slot widths satisfy the same physical recovery limits as manual courses.
-    jab_beats = max(1, ceil((course["min_gap"] - 1e-9) / period))
-    recover_beats = max(1, ceil((max(course["min_gap"],
-                                      RECOVERY_GAP[course["difficulty"]]) - 1e-9) / period))
     duration = chart.get("duration", notes[-1]["time"] + period)
     beat = max(0, ceil((3.0 - phase) / (8 * period))) * 8
     result = []
     phrase_no = 0
+    repetitions = {"warmup": 0, "steady": 0, "peak": 0}
+
     while phase + beat * period < duration - 0.4:
         start = phase + beat * period
-        # Look at the whole phrase instead of choosing actions from isolated hits.
         section_index = min(len(levels) - 1, max(0, int(start / 4.0)))
         level = levels[section_index]
-        if level >= high_cut:
-            shape = ("jab", "jab", "hook", "uppercut", "jab")
-            offsets = (0, jab_beats, 2 * jab_beats,
-                       2 * jab_beats + recover_beats,
-                       2 * jab_beats + 2 * recover_beats)
-            label = "直直摆勾直"
-        elif level >= mid_cut:
-            shape = ("jab", "jab", "hook")
-            offsets = (0, jab_beats, 2 * jab_beats)
-            label = "直直摆"
-        elif level >= 0.09:
-            shape = ("jab", "jab")
-            offsets = (0, max(jab_beats, 2))
-            label = "直直"
-        else:
-            shape, offsets, label = (), (), ""
+        band = ("peak" if level >= high_cut else
+                "steady" if level >= mid_cut else
+                "warmup" if level >= 0.09 else None)
 
-        # Keep a full musical bar for recovery; add bars at fast BPMs.
-        last_beat = offsets[-1] if offsets else 0
-        phrase_beats = max(8, 4 * ceil((last_beat + recover_beats) / 4))
-        start_hand = phrase_no % 2  # 0=left, 1=right; mirror every phrase.
-        candidate = []
-        for index, (kind, delta) in enumerate(zip(shape, offsets)):
-            when = round(start + delta * period, 3)
-            if when >= duration - 0.4:
-                candidate = []  # Don't start a partial combination at EOF.
-                break
-            side = "left" if (start_hand + index) % 2 == 0 else "right"
-            candidate.append({"time": when, "action": f"{side}_{kind}",
-                              "combo_name": label, "combo_step": index + 1,
-                              "combo_total": len(shape), "combo_no": phrase_no + 1})
-        # Reject an entire phrase if it cannot fit with its neighbor. Never
-        # silently remove a single member of a coach's prescribed combo.
-        if candidate and (not result or
-                candidate[0]["time"] - result[-1]["time"] + 1e-9 >=
-                required_gap(MOVEMENTS[result[-1]["action"]],
-                             MOVEMENTS[candidate[0]["action"]], course)):
-            if all(b["time"] - a["time"] + 1e-9 >=
-                   required_gap(MOVEMENTS[a["action"]], MOVEMENTS[b["action"]], course)
-                   for a, b in zip(candidate, candidate[1:])):
-                result.extend(candidate)
+        if band is None:
+            beat += 8
+            phrase_no += 1
+            continue
+
+        seen = repetitions[band]
+        library = PADWORK_COMBOS[band]
+        template = library[(seen // 2) % len(library)]
+        # The same technique is drilled from both sides before changing pattern.
+        candidate, end_beat = _combo_cues(template, start, seen % 2, period, course)
+        recovery = max(course["min_gap"], RECOVERY_GAP[course["difficulty"]])
+        recovery_beats = max(1, ceil((recovery - 1e-9) / period))
+        phrase_beats = max(8, 4 * ceil((end_beat + recovery_beats) / 4))
+
+        # Reject the *entire* exercise if it would clip at the end or collide
+        # with a preceding exercise; never turn a five-hit combo into four.
+        complete = candidate[-1]["time"] < duration - 0.4
+        enough_rest = (not result or
+                       candidate[0]["time"] - result[-1]["time"] + 1e-9 >=
+                       required_gap(MOVEMENTS[result[-1]["action"]],
+                                    MOVEMENTS[candidate[0]["action"]], course))
+        if complete and enough_rest:
+            for note in candidate:
+                note["combo_no"] = phrase_no + 1
+            result.extend(candidate)
+            repetitions[band] += 1
         beat += phrase_beats
         phrase_no += 1
+
     return result
 
 
