@@ -67,6 +67,68 @@ class VideoPacing(unittest.TestCase):
         self.assertEqual(pace_notes(notes, course, True), notes)
         self.assertEqual(MIN_GAP["normal"], .45)
 
+    def test_padwork_makes_intact_coach_combos(self):
+        # First two phrases are medium, subsequent phrases are high.
+        chart = {"bpm": 120, "duration": 48, "sections":
+                 [{"time": i * 4, "intensity": .3 if i < 2 else .95}
+                  for i in range(12)]}
+        seed = [{"time": 4 + .5 * i, "action": "left_jab"} for i in range(80)]
+        course = {"difficulty": "normal", "min_gap": .45,
+                  "movement_set": "padwork"}
+        result = arrange(seed, course, True, chart)
+        self.assertTrue(result)
+        groups = {}
+        for note in result:
+            groups.setdefault(note["combo_no"], []).append(note)
+        self.assertTrue(any(g[0]["combo_name"] == "直直摆" for g in groups.values()))
+        self.assertTrue(any(g[0]["combo_name"] == "直直摆勾直" for g in groups.values()))
+        for group in groups.values():
+            self.assertEqual(len(group), group[0]["combo_total"])
+            self.assertEqual([n["combo_step"] for n in group],
+                             list(range(1, len(group) + 1)))
+            kinds = [MOVEMENTS[n["action"]].kind for n in group]
+            if len(group) == 5:
+                self.assertEqual(kinds, ["jab", "jab", "hook", "uppercut", "jab"])
+            if len(group) == 3:
+                self.assertEqual(kinds, ["jab", "jab", "hook"])
+        for a, b in zip(result, result[1:]):
+            self.assertGreaterEqual(b["time"] - a["time"] + 1e-8,
+                 __import__("choreography").required_gap(
+                     MOVEMENTS[a["action"]], MOVEMENTS[b["action"]], course))
+        self.assertEqual(result, arrange(seed, course, True, chart))
+
+    def test_padwork_mirrors_and_respects_fast_tempos(self):
+        from choreography import required_gap
+        course = {"difficulty": "normal", "min_gap": .45,
+                  "movement_set": "padwork"}
+        for bpm in (60, 120, 160, 180):
+            chart = {"bpm": bpm, "duration": 120, "sections":
+                     [{"time": i * 4, "intensity": .95} for i in range(30)]}
+            notes = [{"time": 4 + i * 60 / bpm, "action": "left_jab"}
+                     for i in range(80)]
+            result = arrange(notes, course, True, chart)
+            groups = {}
+            for note in result:
+                groups.setdefault(note["combo_no"], []).append(note)
+            self.assertGreaterEqual(len(groups), 2)
+            self.assertTrue(all(len(g) == 5 for g in groups.values()))
+            firsts = [g[0]["action"].split("_")[0] for g in groups.values()]
+            self.assertTrue(set(firsts) == {"left", "right"})
+            for a, b in zip(result, result[1:]):
+                self.assertGreaterEqual(b["time"] - a["time"] + 1e-8,
+                         required_gap(MOVEMENTS[a["action"]],
+                                      MOVEMENTS[b["action"]], course))
+            self.assertLess(result[-1]["time"], 120)
+        # Hand-authored timelines must remain untouched.
+        manual = [{"time": 4, "action": "left_jab"},
+                  {"time": 5, "action": "right_hook"}]
+        self.assertEqual(arrange(manual, course, False), manual)
+
+    def test_padwork_config_selected(self):
+        path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
+        course, *_ = config(path)
+        self.assertEqual(course["movement_set"], "padwork")
+
     def test_runtime_overrides_cannot_lower_the_floor(self):
         path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
         course, *_ = config(path, "Demo", "easy", .3)
