@@ -1,4 +1,4 @@
-FROM debian:bookworm-slim
+FROM debian:bookworm-slim AS runtime
 
 ARG GODOT_VERSION=4.6.3
 ARG TARGETARCH
@@ -30,3 +30,13 @@ ENV XDG_DATA_HOME=/home/player/.local/share \
     XDG_CONFIG_HOME=/home/player/.config \
     XDG_CACHE_HOME=/home/player/.cache
 CMD ["sh", "scripts/verify.sh"]
+
+FROM runtime AS video-export
+USER root
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends python3 python3-pil ffmpeg fonts-noto-cjk \
+    && rm -rf /var/lib/apt/lists/*
+USER player
+CMD ["python3", "video/export.py", "courses/neon-round.json", "/tmp/neon-round.mp4"]
+
+FROM runtime AS interactive

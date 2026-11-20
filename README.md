@@ -1,21 +1,90 @@
 # JabJam · 音乐拳击跟练视频生成器
 
-选一首本地歌曲，按节奏编排左右直拳、勾拳等动作，生成一段带音乐和动作提示的跟练视频。练习时在手机、电脑或电视上播放成片，看到提示就跟着做。暂停、回放和重复练习都交给播放器。
+选一首本地歌曲，生成可以在手机、电脑或电视上反复播放的 MP4。跟练时面向屏幕，看方块沿左右轨道飞近，在它抵达击打线的音乐拍点空击。可以直接用播放器暂停和回放。
 
-## 第一个版本要交付什么
+## 看懂八种动作
 
-给工具一首歌，得到一个能在普通播放器里打开的视频文件。动作提示要让人看清**下一拳用哪只手、打什么拳、什么时候打**。验收时只拿走成片，在另一台设备上从头跟一遍。生成一次就可以反复播放，练习时无需手柄、摄像头或账号。
+左右按跟练者面向屏幕时的方向判断。默认左轨青色、右轨橙色。
 
-## 仓库进度
+| 动作 | 左侧 JSON ID | 右侧 JSON ID | 看到什么、怎么跟 |
+| --- | --- | --- | --- |
+| 直拳 | `left_jab` | `right_jab` | 空中方块带直箭头，到线时用对应侧的手向前出拳。 |
+| 摆拳 | `left_hook` | `right_hook` | 箭头朝画面中间横弯：左摆拳向右，右摆拳向左。 |
+| 上勾拳 | `left_uppercut` | `right_uppercut` | J 形箭头从下向上挑，到线时跟着做上勾拳。 |
+| 侧步 | `step_left` | `step_right` | 脚印沿地面靠近，按箭头向左或向右迈步，在拍点落脚。 |
 
-仓库尚无可直接调用的视频导出命令。已有 Godot 原型能读取本地 MP3、WAV 和 Ogg Vorbis，从节拍和能量变化生成带时间戳的动作序列。这部分可以作为生成视频的输入。原型中的键盘判定和训练成绩属于早期互动游戏实验。[原型 PR #7](https://github.com/CheeseAgent/jabjam/pull/7) · [原型运行指南](https://github.com/CheeseAgent/jabjam/blob/codex/godot-foundation/docs/development.md)
+## 在 GitHub Actions 生成视频
 
-## 只有 300 MB 可用内存时
+1. 打开 [Render follow-along MP4](https://github.com/CheeseAgent/jabjam/actions/workflows/render-video.yml)，点 **Run workflow**，选 `main`。保留默认参数可以生成一段约 37 秒的原创音乐组合拳练习。
+2. 想用其他课程，填写相对仓库根目录的 JSON 路径。也可以在表单里覆盖歌名、难度、最短间隔、拍点偏移和场景。默认 `neon` 有落日天际线、沿轨移动的灯带和随击打亮起的侧灯；`classic` 使用静态背景。
+3. 运行成功后，在 **Summary** 点下载链接，解压播放 `jabjam.mp4`。压缩包保留 **7 天**，附上可编辑的 `jabjam-course.json` 和资源报告。自动课程还有 `jabjam.chart.json`，可对照实际拍点。
 
-对 2 vCPU 的 Linux 服务器，值得先验证“顺序编排一首歌，再单独编码视频”。一次独立实验使用 24 秒测试曲生成 14 个动作提示，输出 720p、24 fps 的 H.264/AAC MP4。两个进程依次运行，编排峰值 RSS 约 60 MiB，单线程低延迟编码约 70 MiB；另一组编码参数在同一素材上达到约 448 MiB。这些是短片的进程实测值，尚未在 300 MB 整机限额下验证长歌、复杂画面或完整导出工具。
+手动运行默认只导出并检查所选课程。勾选最后一项会附加四拳和八动作短片、抽帧对照图与三分钟压力测试。相关 PR 和合入 `main` 的改动会自动跑完整验收。构建后的排谱和编码在断网容器内完成。使用仓库中的音乐时，把下载的 JSON 放回同一版仓库的 `build/video/`，它就能按相对路径找到歌曲。
 
-原型在 256 MiB 容器中通过的是无界面测试与启动检查。视频导出需要单独验收。[原型验证记录](https://github.com/CheeseAgent/jabjam/actions/runs/44237796476)
+## 试验版音乐感知谱面（V2）
 
-## 早期设计记录
+自动模式现在根据四秒能量起伏动态调整每八拍的拳数：弱段落留白、普通段落稳定练习、强段落用短连拳穿插休息。真实主歌/副歌识别仍未实现，不保证每首歌精准。演示曲已增加强弱对比以方便试听。
 
-[互动游戏愿景](docs/game-design-vision.md) 保留玩家访谈和早期设想。[Godot 引擎决策](docs/decisions/0001-game-engine-godot.md) 记录当时游戏客户端的选型。视频渲染和编码方案仍待选定。
+导出成功会生成与 MP4 同名的 `.chart.json`，记录每段能量、所有实际出拳时间、BPM 和置信度。若听感持续偏早/偏晚，在 Actions 的 `beat_offset_ms` 中输入 -100 或 100（负值提前、正值延后，范围 ±250ms）。这个校准不能修正错误的 BPM、半速/倍速误判或变速歌曲。复杂歌曲仍需要进一步改造节拍追踪。
+
+## 固定组合拳练习（padwork）
+
+当音乐强度上升，拳组会从双拳热身过渡到常规三、四拳组合，再到五拳组合；每个级别都有多个经典套路，镜像重复练习两次后轮换。这是固定的训练乐句模板，不是每个拳点随机选动作，也不是已经实现真实歌曲的主副歌识别。视频会给出当前组合与第几拳的提示；Easy 自动练习不启用长组合。
+
+## 导出入口
+
+在装有 Godot 4.6.3 Standard、Python 3、Pillow、Noto CJK 字体、FFmpeg 和 ffprobe 的 Linux 环境中执行：
+
+```sh
+python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
+  --song-title "JabJam Demo Loop" --difficulty easy --min-gap 1.4
+```
+
+输出为横屏 H.264 / AAC MP4。音乐在本地分析；拳法、侧步、方块接近速度、配色、分辨率与帧率都由课程控制。课程字段、时间轴和测试口径见[视频导出指南](docs/video-export.md)。
+
+## 从自动谱开始改
+
+先让 JabJam 排一遍，把成片会用到的动作和时间写进普通课程 JSON。下面三条命令可在仓库根目录运行。第一条完成后，打开 `build/my-round.json`，在 `actions` 里换拳、删动作或挪动时间。
+
+```sh
+python3 video/export.py courses/neon-round.json --write-course build/my-round.json
+python3 video/export.py build/my-round.json --check
+python3 video/export.py build/my-round.json build/my-round.mp4
+```
+
+第一条会替换指定的目标 JSON，想保留手改版本时请另取文件名。自有歌曲仍从本地读取，生成的 JSON 会按新位置调整音乐路径。组合名和拳序也会写入谱面。第二条只需 Python 3.9+，会检查课程字段与手排间隔。实际音频时长在写谱或导出时核对。
+
+## 写一份课程
+
+**自动编排**时，把 `actions` 设为 `"auto"`。新增 `"movement_set": "padwork"`（与 `"difficulty": "normal"` 搭配）：教练从经典组合库中轮换 **直直摆、直直勾、直摆直、直直摆直、直直摆勾直、直勾直摆直** 等十余套拳组。每个套路先左起手、再右起手镜像重复两次练熟，才换下一套；音乐强度控制难度分组，组合之间留恢复拍。画面会显示组合名和当前拳序。默认 [neon-round.json](courses/neon-round.json) 已切换为此模式；旧的 `classic`、`mixed` 均保留。详情见 [视频导出指南](docs/video-export.md)。
+
+**手排**时，在 `actions` 数组里写清每个动作及其相对音乐开头的秒数。下面是一份可直接导出的课程，用内置音乐先练左摆拳和右上勾拳，再向左侧步、向右回位：
+
+```json
+{
+  "version": 1,
+  "course": {"music": "builtin:demo", "difficulty": "normal"},
+  "actions": [
+    {"time": 4.0, "action": "left_hook"},
+    {"time": 6.0, "action": "right_uppercut"},
+    {"time": 8.0, "action": "step_left"},
+    {"time": 10.0, "action": "step_right"}
+  ]
+}
+```
+
+换歌时，把 `course.music` 改为相对这份 JSON 的 MP3、WAV 或 Ogg Vorbis 文件路径。想放慢节奏，可设置 `course.min_gap` 或在调用时传 `--min-gap`（秒）。导出器取用户设置和下表规则中的较大值。手排动作过密时，错误信息会指出要调整的两个时刻。
+
+| 相邻动作的最短间隔 | 入门 `easy` | 标准 `normal` |
+| --- | ---: | ---: |
+| 一般出拳 | 1.10 秒 | 0.45 秒 |
+| 摆拳或上勾拳之后，或连续使用同一只手 | 1.35 秒 | 0.90 秒 |
+| 侧步之前和之后 | 1.75 秒 | 1.50 秒 |
+
+## 接手代码时从哪里改
+
+[仓库根目录的 AGENTS.md](AGENTS.md) 把改课程、调节奏、加组合和改画面分别对应到文件、函数和验收命令。可以先运行 `python3 video/export.py courses/eight-moves.json --check`，确认能读出 8 个手排动作。
+
+## 早期交互原型
+
+Godot 互动工程仍可以独立运行。导出器直接复用它的导歌及编排实现，成片播放与动作计分彼此独立。[原型运行指南](docs/development.md) · [游戏设计历史](docs/game-design-vision.md) · [引擎选型记录](docs/decisions/0001-game-engine-godot.md)
