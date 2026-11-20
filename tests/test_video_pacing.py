@@ -5,7 +5,7 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "video"))
 from export import config
-from choreography import arrange, pace_notes
+from choreography import arrange, pace_notes, MIN_GAP
 from movements import MOVEMENTS
 
 
@@ -19,7 +19,7 @@ class VideoPacing(unittest.TestCase):
         self.assertEqual(pace_notes(notes, self.course, True), [notes[0], notes[3]])
 
     def test_manual_spacing_and_exact_boundary(self):
-        for difficulty, after_hook, basic in [("easy", 1.35, 1.1), ("normal", 1, .7)]:
+        for difficulty, after_hook, basic in [("easy", 1.35, 1.1), ("normal", .90, .45)]:
             self.course.update(difficulty=difficulty, min_gap=basic)
             for first, second, gap in [("left_hook", "right_jab", after_hook),
                                        ("left_jab", "left_jab", after_hook),
@@ -40,7 +40,7 @@ class VideoPacing(unittest.TestCase):
                 notes[1]["time"] -= .01
                 with self.assertRaisesRegex(ValueError, "needs"):
                     arrange(notes, course, False)
-        notes = [{"time": 3, "action": "left_uppercut"}, {"time": 3.9, "action": "right_jab"}]
+        notes = [{"time": 3, "action": "left_uppercut"}, {"time": 3.8, "action": "right_jab"}]
         with self.assertRaisesRegex(ValueError, "needs"):
             arrange(notes, self.course, False)
 
@@ -59,6 +59,13 @@ class VideoPacing(unittest.TestCase):
         self.assertEqual(arrange(original, mixed, False), original)
         easy = [{"time": 3 + 2*i, "action": pattern[i % 2]} for i in range(48)]
         self.assertEqual(arrange(easy, dict(mixed, difficulty="easy"), True), easy)
+
+    def test_normal_accepts_short_punch_bursts(self):
+        course = {"difficulty": "normal", "min_gap": MIN_GAP["normal"]}
+        notes = [{"time": 4 + i*.5, "action": a} for i,a in enumerate(
+            ["left_jab", "right_jab", "left_jab", "right_jab"])]
+        self.assertEqual(pace_notes(notes, course, True), notes)
+        self.assertEqual(MIN_GAP["normal"], .45)
 
     def test_runtime_overrides_cannot_lower_the_floor(self):
         path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
