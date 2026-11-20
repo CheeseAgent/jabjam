@@ -1,0 +1,12 @@
+services:
+  check:
+    build: .
+    platform: linux/amd64
+    cpus: 2.0
+    mem_limit: 1536m
+    memswap_limit: 1536m
+    network_mode: none
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL

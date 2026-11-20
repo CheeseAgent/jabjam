@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "course": {
+    "music": "builtin:demo",
+    "difficulty": "normal",
+    "movement_set": "padwork",
+    "bpm": 120
+  },
+  "actions": "auto",
+  "picture": {
+    "size": [1280, 720],
+    "fps": 24,
+    "approach_seconds": 2.0,
+    "left_color": "#63edce",
+    "right_color": "#ff916d"
+  }
+}
