@@ -102,7 +102,8 @@ def padwork_round(notes, course, chart):
     levels = [s.get("intensity", s.get("energy", 0.0)) for s in sections]
     active = [v for v in levels if v >= 0.09]
     high_cut = max(0.58, _percentile(active, 0.60))
-    mid_cut = max(0.21, _percentile(active, 0.24))
+    # Use a stable floor for teaching triples even when most of the song is loud.
+    mid_cut = 0.28
 
     # Slot widths satisfy the same physical recovery limits as manual courses.
     jab_beats = max(1, ceil((course["min_gap"] - 1e-9) / period))
