@@ -1,0 +1,8 @@
+{
+  "prepare": 0.30,
+  "strike": 0.10,
+  "recover": 0.30,
+  "minimum_landing": 0.14,
+  "idle": 1.60,
+  "celebrate": 1.60
+}

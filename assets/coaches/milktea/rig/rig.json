@@ -1,0 +1,49 @@
+{
+  "format": "jabjam.cutout",
+  "version": 1,
+  "canvas": [
+    480,
+    596
+  ],
+  "coordinates": "x-right, y-down, degrees clockwise; sides belong to the viewer",
+  "alternate_textures": {
+    "ear_back_left.png": {
+      "bone": "ear_left",
+      "pivot": [
+        51,
+        226
+      ],
+      "scale": 0.65
+    },
+    "ear_back_right.png": {
+      "bone": "ear_right",
+      "pivot": [
+        97,
+        226
+      ],
+      "scale": 0.65
+    }
+  },
+  "bones": [
+    {"id": "pelvis", "parent": null, "at": [240, 438], "z": 22, "texture": "pelvis.png", "pivot": [149, 28], "scale": 0.57},
+    {"id": "torso", "parent": "pelvis", "at": [0, -4], "z": 24, "texture": "torso.png", "pivot": [117, 171], "scale": 0.57},
+    {"id": "tail", "parent": "pelvis", "at": [45, 14], "z": 0, "texture": "tail.png", "pivot": [38, 63], "scale": 0.34},
+    {"id": "head", "parent": "torso", "at": [0, -89], "z": 30, "texture": "head.png", "pivot": [212, 341], "scale": 0.57},
+    {"id": "ear_left", "parent": "head", "at": [-58, -167], "z": 26, "texture": "ear_left.png", "pivot": [133, 241], "scale": 0.61},
+    {"id": "ear_right", "parent": "head", "at": [58, -167], "z": 27, "texture": "ear_right.png", "pivot": [52, 240], "scale": 0.61},
+    {"id": "tuft", "parent": "head", "at": [-7, -173], "z": 32, "texture": "tuft.png", "pivot": [93, 91], "scale": 0.55},
+    {"id": "face", "parent": "head", "at": [0, 0], "z": 31, "texture": "face_open.png", "pivot": [212, 341], "scale": 0.57, "variants": {"open": "face_open.png", "happy": "face_happy.png", "focus": "face_focus.png", "sparkle": "face_sparkle.png"}},
+    {"id": "thigh_left", "parent": "pelvis", "at": [-42, 21], "z": 10, "underlay": "ink_thigh_left.png", "angle": 2, "texture": "thigh_left.png", "pivot": [59, 20], "scale": 0.5},
+    {"id": "shin_left", "parent": "thigh_left", "at": [-2, 42], "z": 12, "underlay": "ink_shin_left.png", "texture": "shin_left.png", "pivot": [57, 19], "scale": 0.49},
+    {"id": "foot_left", "parent": "shin_left", "at": [-2, 40], "z": 14, "underlay": "ink_foot_left.png", "texture": "foot_left.png", "pivot": [96, 23], "scale": 0.56},
+    {"id": "upper_arm_left", "parent": "torso", "at": [-50, -63], "z": 23, "underlay": "ink_upper_arm_left.png", "angle": -9, "texture": "upper_arm_left.png", "pivot": [89, 27], "scale": 0.53},
+    {"id": "lower_arm_left", "parent": "upper_arm_left", "at": [-27, 40], "z": 33, "underlay": "ink_lower_arm_left.png", "angle": 178, "texture": "lower_arm_left.png", "pivot": [43, 19], "scale": 0.47},
+    {"id": "glove_left", "parent": "lower_arm_left", "at": [3, 34], "z": 40, "texture": "glove_left.png", "pivot": [67, 22], "scale": 0.58},
+    {"id": "thigh_right", "parent": "pelvis", "at": [42, 21], "z": 10, "underlay": "ink_thigh_right.png", "angle": -2, "texture": "thigh_right.png", "pivot": [57, 20], "scale": 0.5},
+    {"id": "shin_right", "parent": "thigh_right", "at": [2, 42], "z": 12, "underlay": "ink_shin_right.png", "texture": "shin_right.png", "pivot": [53, 19], "scale": 0.49},
+    {"id": "foot_right", "parent": "shin_right", "at": [2, 40], "z": 14, "underlay": "ink_foot_right.png", "texture": "foot_right.png", "pivot": [52, 23], "scale": 0.56},
+    {"id": "upper_arm_right", "parent": "torso", "at": [50, -63], "z": 23, "underlay": "ink_upper_arm_right.png", "angle": 9, "texture": "upper_arm_right.png", "pivot": [36, 27], "scale": 0.53},
+    {"id": "lower_arm_right", "parent": "upper_arm_right", "at": [27, 40], "z": 33, "underlay": "ink_lower_arm_right.png", "angle": -178, "texture": "lower_arm_right.png", "pivot": [51, 19], "scale": 0.47},
+    {"id": "glove_right", "parent": "lower_arm_right", "at": [-3, 34], "z": 40, "texture": "glove_right.png", "pivot": [83, 22], "scale": 0.58}
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "format": "jabjam.rig-motion",
+  "version": 1,
+  "poses": {
+    "guard": {},
+    "bounce": {"pelvis": [0, 3, 0], "torso": [0, 2, -0.6], "head": [0, 1, 0.6], "ear_left": [0, 0, -2], "ear_right": [0, 0, 2], "upper_arm_left": [0, 0, 3], "upper_arm_right": [0, 0, -3], "shin_left": [0, 0, -2], "shin_right": [0, 0, 2]},
+    "dip": {"pelvis": [0, -2, 0], "torso": [0, -1, 0.4], "ear_left": [0, 0, 2], "ear_right": [0, 0, -2], "upper_arm_left": [0, 0, -2], "upper_arm_right": [0, 0, 2]},
+    "load_jab": {"torso": [3, 2, 3], "head": [0, 0, -2], "upper_arm_left": [0, 0, -12], "lower_arm_left": [0, 0, 13], "upper_arm_right": [0, 0, 6]},
+    "jab": {"torso": [-4, -1, -4], "head": [0, 0, 3], "ear_left": [0, 0, 5], "upper_arm_left": [0, 0, 78], "lower_arm_left": [0, 0, -124], "glove_left": [0, 0, -5], "upper_arm_right": [0, 0, 1], "lower_arm_right": [0, 0, -5]},
+    "load_hook": {"torso": [-2, 3, 5], "head": [0, 0, -4], "upper_arm_left": [0, 0, 21], "lower_arm_left": [0, 0, -29], "upper_arm_right": [0, 0, -4]},
+    "hook": {"torso": [-3, 0, -5], "head": [0, 0, 3], "upper_arm_left": [0, 0, 85], "lower_arm_left": [0, 0, 5], "glove_left": [0, 0, 7], "ear_right": [0, 0, -5]},
+    "load_uppercut": {"pelvis": [0, 4, 0], "torso": [0, 4, 5], "head": [0, 0, -4], "upper_arm_left": [0, 0, -6], "lower_arm_left": [0, 0, -48]},
+    "uppercut": {"torso": [-4, -5, -4], "upper_arm_left": [0, 0, 85], "lower_arm_left": [0, 0, -63], "glove_left": [0, 0, -8], "head": [0, 0, 3], "ear_left": [0, 0, 6]},
+    "load_step": {"pelvis": [5, 3, 1], "thigh_left": [0, 0, 5], "shin_left": [0, 0, -10], "head": [0, 0, -1], "upper_arm_left": [0, 0, -5]},
+    "step": {"pelvis": [-21, 2, -1], "thigh_left": [0, 0, 18], "shin_left": [0, 0, -10], "foot_left": [0, 0, -7], "thigh_right": [0, 0, -17], "shin_right": [0, 0, 7], "foot_right": [0, 0, 11], "torso": [0, 0, -2], "head": [0, 0, 2], "upper_arm_left": [0, 0, 5], "upper_arm_right": [0, 0, -5]},
+    "cheer": {"pelvis": [0, -4, 0], "torso": [0, -2, 0], "upper_arm_left": [0, 0, 108], "upper_arm_right": [0, 0, -108], "lower_arm_left": [0, 0, -139], "lower_arm_right": [0, 0, 139], "ear_left": [0, 0, -6], "ear_right": [0, 0, 6], "head": [0, 0, -2]},
+    "cheer_peak": {"pelvis": [0, -6, 0], "torso": [0, -2, 0], "upper_arm_left": [0, 0, 115], "upper_arm_right": [0, 0, -115], "lower_arm_left": [0, 0, -144], "lower_arm_right": [0, 0, 144], "ear_left": [0, 0, -2], "ear_right": [0, 0, 2], "head": [0, 0, 1]}
+  },
+  "motions": {
+    "idle": {"idle": [[0, "guard"], [0.25, "bounce"], [0.75, "dip"], [1, "guard"]]},
+    "celebrate": {"celebrate": [[0, "guard"], [0.2, "cheer"], [0.42, "cheer_peak"], [0.6, "cheer"], [0.76, "cheer_peak"], [1, "guard"]]},
+    "jab": {"prepare": [[0, "guard"], [0.44, "load_jab"], [1, "jab"]], "strike": [[0, "jab"], [1, "jab"]], "recover": [[0, "jab"], [1, "guard"]]},
+    "hook": {"prepare": [[0, "guard"], [0.44, "load_hook"], [1, "hook"]], "strike": [[0, "hook"], [1, "hook"]], "recover": [[0, "hook"], [1, "guard"]]},
+    "uppercut": {"prepare": [[0, "guard"], [0.44, "load_uppercut"], [1, "uppercut"]], "strike": [[0, "uppercut"], [1, "uppercut"]], "recover": [[0, "uppercut"], [1, "guard"]]},
+    "step": {"prepare": [[0, "guard"], [0.44, "load_step"], [1, "step"]], "strike": [[0, "step"], [1, "step"]], "recover": [[0, "step"], [1, "guard"]]}
+  }
+}

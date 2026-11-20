@@ -30,7 +30,6 @@ var strike_buttons: Array[Button] = []
 var font := ThemeDB.fallback_font
 var flash := 0.0
 var feedback := ""
-var demonstrated_note := -1
 var save_notice := ""
 var history_count := 0
 
@@ -93,7 +92,8 @@ func _start() -> void:
 	session.start(selected_chart)
 	player.stream_paused = false
 	player.play()
-	demonstrated_note = -1
+	coach.set_chart(session.chart)
+	coach.seek(0.0)
 	save_notice = ""
 	feedback = "GET READY"
 	flash = 1.0
@@ -146,12 +146,7 @@ func _process(delta: float) -> void:
 		if session.misses > old_misses:
 			feedback = "MISS"
 			flash = 1.0
-		# Demonstrate before the target reaches the hit line.
-		if session.cursor < session.chart.size():
-			var note: Dictionary = session.chart[session.cursor]
-			if float(note.time) - session.clock <= 0.5 and demonstrated_note != session.cursor:
-				coach.demonstrate(note.action)
-				demonstrated_note = session.cursor
+		coach.seek(session.clock)
 		if session.state == Session.State.STAMP:
 			player.stop()
 			_sync_ui()
@@ -196,7 +191,9 @@ func _sync_ui() -> void:
 	var playing: bool = session.state in [Session.State.PLAYING, Session.State.PAUSED]
 	if not playing:
 		player.stop()
-	coach.visible = not picker.visible and session.state in [Session.State.READY, Session.State.PLAYING]
+	coach.visible = not picker.visible and session.state in [Session.State.READY, Session.State.PLAYING, Session.State.PAUSED]
+	if session.state == Session.State.READY:
+		coach.rig.apply_pose("idle", "", 0.0)
 	coach.process_mode = Node.PROCESS_MODE_INHERIT if coach.visible else Node.PROCESS_MODE_DISABLED
 	pause_button.visible = playing
 	pause_button.text = "RESUME / ESC" if session.state == Session.State.PAUSED else "PAUSE / ESC"
@@ -265,7 +262,7 @@ func _draw_home() -> void:
 	_text(Vector2(588, 480), "%d NOTES" % (32 if selected_chart.is_empty() else selected_chart.notes.size()), 25)
 	_text(Vector2(588, 506), "KEYBOARD OR TOUCH", 14, MUTED)
 	_text(Vector2(910, 181), "YOUR CORNER", 17, MINT)
-	_text(Vector2(903, 544), "Geometric coach / prototype", 16, MUTED)
+	_text(Vector2(903, 544), "MILKTEA  /  MIRROR COACH", 16, MUTED)
 	_text(Vector2(900, 604), "%d saved practices" % history_count, 17, MUTED)
 
 func _draw_training() -> void:

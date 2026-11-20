@@ -1,4 +1,8 @@
-# Coach skin pack contract (v1)
+# Coach art packs
+
+The bundled [Milktea cutout rig](milktea/rig/rig.json) uses its own joint and motion schema. Read the [rig handoff](../../docs/coach-avatar.md) for pivots, z-order, viewer-side naming and the sample.
+
+## Sprite clips (v1)
 
 The coach module renders a placeholder vector bunny by default. Replace it with transparent
 PNG sequences without changing beat detection, choreography, course actions, or the arena.

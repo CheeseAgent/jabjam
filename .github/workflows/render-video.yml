@@ -33,6 +33,8 @@ on:
   pull_request:
     paths:
       - 'video/**'
+      - 'assets/coaches/**'
+      - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
       - 'tests/**'
@@ -44,6 +46,8 @@ on:
     branches: [main]
     paths:
       - 'video/**'
+      - 'assets/coaches/**'
+      - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
       - 'tests/**'
@@ -106,10 +110,12 @@ jobs:
           echo "::group::Pacing and authoring tests"
           offline python3 tests/test_video_pacing.py
           offline python3 tests/test_coach_avatar.py
+          offline python3 tests/test_cutout_rig.py
           echo "::endgroup::"
 
           echo "::group::Full-body coach demonstration"
           offline python3 video/export.py courses/coach-demo.json "$out/coach-demo.mp4"
+          offline python3 tests/check_coach_sample.py "$out/coach-demo.mp4"
           echo "::endgroup::"
 
           echo "::group::Four-punch waveform and eight-movement frames"

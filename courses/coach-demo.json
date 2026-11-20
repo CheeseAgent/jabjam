@@ -19,6 +19,6 @@
     "size": [1280, 720],
     "fps": 24,
     "approach_seconds": 2,
-    "coach": {"enabled": true, "renderer": "vector", "side": "right", "scale": 1.0}
+    "coach": {"enabled": true, "renderer": "rig", "side": "right", "scale": 1.0}
   }
 }

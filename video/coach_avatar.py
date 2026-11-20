@@ -1,4 +1,4 @@
-"""Optional full-body coach overlay. Both backends implement draw(canvas, pose, t)."""
+"""Optional full-body coach overlay. The backends implement draw(canvas, pose, t)."""
 from functools import lru_cache
 import json
 import math
@@ -6,6 +6,7 @@ from pathlib import Path
 
 from PIL import Image, ImageDraw
 
+from coach_rig import CutoutRig
 from coach_timeline import CoachTimeline, validate_coach_config
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "coaches"
@@ -146,14 +147,27 @@ class SpriteCoach:
         _composite(canvas, _sprite_image(str(frame)), side, scale)
 
 
+class RigCoach:
+    def __init__(self, skin):
+        self.rig = CutoutRig(ASSETS / skin / "rig")
+
+    def draw(self, canvas, pose, t, side, scale):
+        _composite(canvas, self.rig.frame(pose), side, scale)
+
+
 class CoachLayer:
     def __init__(self, notes, settings):
         self.settings = validate_coach_config(settings)
         self.enabled = self.settings["enabled"]
         if self.enabled:
-            self.timeline = CoachTimeline(notes)
-            self.renderer = (VectorCoach() if self.settings["renderer"] == "vector"
-                             else SpriteCoach(self.settings["skin"]))
+            backend = self.settings["renderer"]
+            self.timeline = CoachTimeline(notes, celebrate=backend == "rig")
+            if backend == "vector":
+                self.renderer = VectorCoach()
+            elif backend == "sprite":
+                self.renderer = SpriteCoach(self.settings["skin"])
+            else:
+                self.renderer = RigCoach(self.settings["skin"])
 
     def draw(self, canvas, t):
         if self.enabled:

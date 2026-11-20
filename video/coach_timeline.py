@@ -1,16 +1,20 @@
 """Pure, timestamp-driven coaching poses. No pixels, audio engine or frame state."""
 from bisect import bisect_right
 from dataclasses import dataclass
+import json
 import math
+from pathlib import Path
 import re
 from typing import Optional
 
 from movements import MOVEMENTS
 
-PREPARE_SECONDS = 0.30
-STRIKE_SECONDS = 0.10
-RECOVER_SECONDS = 0.30
-IDLE_SECONDS = 1.60
+TIMING_PATH = Path(__file__).resolve().parents[1] / "assets/coaches/timing.json"
+TIMING = json.loads(TIMING_PATH.read_text(encoding="utf-8"))
+PREPARE_SECONDS = TIMING["prepare"]
+STRIKE_SECONDS = TIMING["strike"]
+RECOVER_SECONDS = TIMING["recover"]
+IDLE_SECONDS = TIMING["idle"]
 
 
 @dataclass(frozen=True)
@@ -32,8 +36,8 @@ def validate_coach_config(value):
     if type(enabled) is not bool:
         raise ValueError("picture.coach.enabled must be a boolean")
     renderer = value.get("renderer", "vector")
-    if renderer not in ("vector", "sprite"):
-        raise ValueError("picture.coach.renderer must be vector or sprite")
+    if renderer not in ("vector", "sprite", "rig"):
+        raise ValueError("picture.coach.renderer must be vector, sprite or rig")
     side = value.get("side", "right")
     if side not in ("left", "right"):
         raise ValueError("picture.coach.side must be left or right")
@@ -49,7 +53,8 @@ def validate_coach_config(value):
 class CoachTimeline:
     """Stateless pose selection: t is always seconds since the song began."""
 
-    def __init__(self, notes):
+    def __init__(self, notes, celebrate=False):
+        self.celebrate = celebrate
         self.notes = notes
         self.times = [note["time"] for note in notes]
         if any(a >= b for a, b in zip(self.times, self.times[1:])):
@@ -67,7 +72,7 @@ class CoachTimeline:
         if upcoming:
             until_hit = upcoming["time"] - t
             after_previous = t - previous["time"] if previous else float("inf")
-            if 0 < until_hit <= PREPARE_SECONDS and after_previous >= .14:
+            if 0 < until_hit <= PREPARE_SECONDS and after_previous >= TIMING["minimum_landing"]:
                 return CoachPose("prepare", upcoming["action"], 1 - until_hit / PREPARE_SECONDS)
         if previous:
             elapsed = t - previous["time"]
@@ -76,4 +81,8 @@ class CoachTimeline:
             if elapsed < STRIKE_SECONDS + RECOVER_SECONDS:
                 return CoachPose("recover", previous["action"],
                                  (elapsed - STRIKE_SECONDS) / RECOVER_SECONDS)
+            if self.celebrate and not upcoming:
+                phase = (elapsed - STRIKE_SECONDS - RECOVER_SECONDS) / TIMING["celebrate"]
+                if 0 <= phase < 1:
+                    return CoachPose("celebrate", None, phase)
         return CoachPose("idle", None, (t % IDLE_SECONDS) / IDLE_SECONDS)

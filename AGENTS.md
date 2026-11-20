@@ -39,4 +39,4 @@ python3 tests/check_eight_moves.py build/eight-moves.mp4
 独立的绝对时间姿势逻辑在 `video/coach_timeline.py`；绘画后端在 `video/coach_avatar.py`。
 课程 `picture.coach.enabled=true` 才开启，未配置的旧课程保持原状。
 从 `courses/coach-demo.json`、`docs/coach-avatar.md` 和 `assets/coaches/README.md` 接手。
-运行 `python3 tests/test_coach_avatar.py` 后再生成八动作样片；不要为了角色动画改编舞时间。
+骨骼与动作数据在 `assets/coaches/milktea/rig/`，Godot 用 `scenes/coach_demo.tscn` 播放相同课程。运行 `python3 tests/test_coach_avatar.py` 和 `python3 tests/test_cutout_rig.py` 后生成八动作样片，用 `python3 tests/check_coach_sample.py build/coach-demo.mp4` 核对解码画面。

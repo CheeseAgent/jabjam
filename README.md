@@ -89,8 +89,8 @@ python3 video/export.py build/my-round.json build/my-round.mp4
 
 Godot 互动工程仍可以独立运行。导出器直接复用它的导歌及编排实现，成片播放与动作计分彼此独立。[原型运行指南](docs/development.md) · [游戏设计历史](docs/game-design-vision.md) · [引擎选型记录](docs/decisions/0001-game-engine-godot.md)
 
-## 🐰 全身小奶茶教练（实验性可选）
+## 🐰 小奶茶骨骼教练
 
-用 `courses/coach-demo.json` 生成带全身兔子示意教练的八动作短片。原课程不受影响。
-第一阶段使用程序绘制的占位兔子；透明 PNG 精灵图可通过独立皮肤包替换，**尚未提供正式小奶茶人物素材**。
-接手架构、DSF 待办、测试和素材规范见 [教练交接文档](docs/coach-avatar.md)。
+[观看 24 秒跟练样片](docs/coach-preview/milktea-rig.mp4) · [关键姿势](docs/coach-preview/key-poses.jpg) · [绑定与维护](docs/coach-avatar.md)
+
+运行 `python3 video/export.py courses/coach-demo.json build/coach-demo.mp4` 即可生成带小奶茶的八动作跟练视频。在 Godot 4 中打开 `scenes/coach_demo.tscn`，按 F6 可单独观看教练。小奶茶使用同一套独立 PNG、关节与动作曲线。旧课程可继续使用已有的逐帧皮肤或矢量教练。
