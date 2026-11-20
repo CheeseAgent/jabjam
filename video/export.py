@@ -117,6 +117,8 @@ def prepare(course, music, actions, tmp):
                  if 3.0 <= note["time"] + offset < duration - 0.4]
     else:
         notes = actions
+    if not notes:
+        raise ValueError("No notes remain after beat offset correction")
     if notes[-1]["time"] >= duration:
         raise ValueError("Every action must fall before the end of the music")
     # Vorbis stores tags on the audio stream; MP3 usually stores them on the container.
