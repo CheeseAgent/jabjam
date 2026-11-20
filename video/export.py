@@ -29,11 +29,11 @@ def number(value, low, high, label):
     return value
 
 
-def config(path, song_title=None, difficulty=None, min_gap=None):
+def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None):
     data = fields(json.loads(path.read_text()), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("Expected config version 1")
-    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap", "movement_set"), "course")
+    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap", "movement_set", "beat_offset_ms"), "course")
     if course.get("movement_set", "classic") not in ("classic", "mixed"):
         raise ValueError("movement_set must be classic or mixed")
     if song_title is not None:
@@ -59,6 +59,8 @@ def config(path, song_title=None, difficulty=None, min_gap=None):
     course["min_gap"] = max(MIN_GAP[difficulty], number(requested_gap, 0, 600, "min_gap"))
     if "bpm" in course:
         number(course["bpm"], 60, 180, "bpm")
+    offset = course.get("beat_offset_ms", 0) if beat_offset_ms is None else beat_offset_ms
+    course["beat_offset_ms"] = number(offset, -250, 250, "beat_offset_ms")
     actions = data.get("actions", "auto")
     if actions != "auto":
         if not isinstance(actions, list) or not 1 <= len(actions) <= 1000:
@@ -106,9 +108,13 @@ def prepare(course, music, actions, tmp):
     if audio.suffix.lower() == ".ogg" and streams[0]["codec_name"] != "vorbis":
         raise ValueError("Expected Ogg Vorbis")
     duration = number(float(streams[0]["duration"]), 8, 600, "audio duration")
+    chart = None
     if actions == "auto":
         chart = json.loads(chart_file.read_text())
         notes = chart["notes"]
+        offset = course["beat_offset_ms"] / 1000.0
+        notes = [dict(note, time=round(note["time"] + offset, 3)) for note in notes
+                 if 3.0 <= note["time"] + offset < duration - 0.4]
     else:
         notes = actions
     if notes[-1]["time"] >= duration:
@@ -118,18 +124,18 @@ def prepare(course, music, actions, tmp):
             for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
     title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
-    return audio, duration, arrange(notes, course, actions == "auto"), title[:128]
+    return audio, duration, arrange(notes, course, actions == "auto"), title[:128], chart
 
 
-def export(path, output, song_title=None, difficulty=None, min_gap=None):
-    course, music, actions, picture = config(path, song_title, difficulty, min_gap)
+def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None):
+    course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
     output.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         tmp = Path(folder).resolve()
-        audio, duration, notes, title = prepare(course, music, actions, tmp)
+        audio, duration, notes, title, chart = prepare(course, music, actions, tmp)
         arena = Arena(title, picture, notes, duration)
         size = picture.get("size", [1280, 720])
         fps = picture.get("fps", 24)
@@ -151,6 +157,13 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None):
                 encoder.kill()
                 raise
         os.replace(temp_mp4, output)
+    if chart is not None:
+        diagnostics = {"algorithm": chart.get("version"), "bpm": chart.get("bpm"),
+                       "tempo_confidence": chart.get("confidence"),
+                       "beat_offset_ms": course["beat_offset_ms"],
+                       "sections": chart.get("sections", []), "notes": notes}
+        output.with_suffix(".chart.json").write_text(
+            json.dumps(diagnostics, ensure_ascii=False, indent=2) + "\n")
     shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)
     gap_text = f"{shortest:.3f}s" if shortest is not None else "n/a"
     print(f"{title} [{course['difficulty']}], shortest interval {gap_text}")
@@ -165,8 +178,9 @@ if __name__ == "__main__":
     parser.add_argument("--song-title", help="Song name shown in the header and MP4 metadata")
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
+    parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
     args = parser.parse_args()
     try:
-        export(args.config, args.output, args.song_title, args.difficulty, args.min_gap)
+        export(args.config, args.output, args.song_title, args.difficulty, args.min_gap, args.beat_offset_ms)
     except (OSError, KeyError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
         sys.exit(f"JabJam export failed: {exc}")
