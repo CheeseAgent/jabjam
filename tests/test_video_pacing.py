@@ -124,6 +124,67 @@ class VideoPacing(unittest.TestCase):
                   {"time": 5, "action": "right_hook"}]
         self.assertEqual(arrange(manual, course, False), manual)
 
+    def test_padwork_repertoire_rotates_after_mirrored_repetition(self):
+        from choreography import PADWORK_COMBOS, required_gap
+        self.assertGreaterEqual(len(PADWORK_COMBOS["steady"]), 4)
+        self.assertGreaterEqual(len(PADWORK_COMBOS["peak"]), 4)
+        self.assertTrue(any(len(t[2]) == 4 for t in PADWORK_COMBOS["steady"]))
+        course = {"difficulty": "normal", "min_gap": .45,
+                  "movement_set": "padwork"}
+        for intensity, library_name in ((.4, "steady"), (.95, "peak")):
+            chart = {"bpm": 120, "duration": 200,
+                     "sections": [{"time": i * 4, "intensity": intensity}
+                                  for i in range(50)]}
+            seed = [{"time": 4 + .5 * i, "action": "left_jab"}
+                    for i in range(48)]
+            result = arrange(seed, course, True, chart)
+            phrases = {}
+            for note in result:
+                phrases.setdefault(note["combo_no"], []).append(note)
+            combos = list(phrases.values())
+            # Rehearse every pattern twice, switching the lead hand.
+            self.assertGreaterEqual(len(combos), 10)
+            used = [p[0]["combo_id"] for p in combos]
+            self.assertGreaterEqual(len(set(used)), 4)
+            expected_ids = [entry[0] for entry in PADWORK_COMBOS[library_name]]
+            self.assertEqual(used[:8], [expected_ids[i // 2] for i in range(8)])
+            for i in range(0, 8, 2):
+                self.assertEqual([MOVEMENTS[n["action"]].kind for n in combos[i]],
+                                 [MOVEMENTS[n["action"]].kind for n in combos[i+1]])
+                self.assertEqual(combos[i][0]["action"].split("_")[0], "left")
+                self.assertEqual(combos[i+1][0]["action"].split("_")[0], "right")
+            for phrase in combos:
+                self.assertEqual(len(phrase), phrase[0]["combo_total"])
+                self.assertTrue(all(n["combo_id"] == phrase[0]["combo_id"]
+                                    for n in phrase))
+            for previous, current in zip(result, result[1:]):
+                self.assertGreaterEqual(
+                    current["time"] - previous["time"] + 1e-8,
+                    required_gap(MOVEMENTS[previous["action"]],
+                                 MOVEMENTS[current["action"]], course))
+            self.assertEqual(result, arrange(seed, course, True, chart))
+
+    def test_padwork_respects_higher_recovery_without_broken_combos(self):
+        from choreography import required_gap
+        chart = {"bpm": 160, "duration": 115,
+                 "sections": [{"time": i * 4, "intensity": .8}
+                              for i in range(29)]}
+        seed = [{"time": 4 + .375 * i, "action": "left_jab"}
+                for i in range(48)]
+        course = {"difficulty": "normal", "min_gap": 1.25,
+                  "movement_set": "padwork"}
+        notes = arrange(seed, course, True, chart)
+        combos = {}
+        for n in notes:
+            combos.setdefault(n["combo_no"], []).append(n)
+        self.assertTrue(combos)
+        self.assertTrue(all(len(group) == group[0]["combo_total"]
+                            for group in combos.values()))
+        self.assertTrue(all(b["time"] - a["time"] + 1e-8 >=
+                            required_gap(MOVEMENTS[a["action"]],
+                                         MOVEMENTS[b["action"]], course)
+                            for a, b in zip(notes, notes[1:])))
+
     def test_padwork_config_selected(self):
         path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
         course, *_ = config(path)
