@@ -108,6 +108,10 @@ jobs:
           offline python3 tests/test_coach_avatar.py
           echo "::endgroup::"
 
+          echo "::group::Full-body coach demonstration"
+          offline python3 video/export.py courses/coach-demo.json "$out/coach-demo.mp4"
+          echo "::endgroup::"
+
           echo "::group::Four-punch waveform and eight-movement frames"
           offline python3 tests/render_video_job.py courses/four-punches.json "$out/four-punches.mp4" \
             --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4 --scene classic
