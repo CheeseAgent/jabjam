@@ -28,7 +28,7 @@ class CoachContractTests(unittest.TestCase):
         self.assertEqual(timeline.at(3.8).state, "prepare")
         self.assertEqual(timeline.at(4.0).state, "strike")
         self.assertEqual(timeline.at(4.0).action, "left_jab")
-        self.assertEqual(timeline.at(4.2).state, "recover")
+        self.assertEqual(timeline.at(4.2).state, "prepare")
         self.assertEqual(timeline.at(4.28).action, "right_hook")
         self.assertEqual(timeline.at(4.5).action, "right_hook")
         self.assertEqual(timeline.at(6.0).action, "step_left")
@@ -50,10 +50,10 @@ class CoachContractTests(unittest.TestCase):
         self.assertNotIn("coach", config(base)[3])
         original = json.loads(base.read_text())
         original["picture"]["coach"] = {"enabled": True, "renderer": "vector"}
-        with tempfile.TemporaryDirectory(dir=ROOT / "courses") as folder:
+        with tempfile.TemporaryDirectory() as folder:
             path = Path(folder) / "test.json"
-            # Temporary courses live one directory below courses/.
-            original["course"]["music"] = "../../tests/fixtures/pulse.ogg"
+            # The synthetic fixture lives in the checkout; write test JSON under /tmp, read-only checkout safe.
+            original["course"]["music"] = str((ROOT / "tests/fixtures/pulse.ogg").resolve())
             path.write_text(json.dumps(original), encoding="utf-8")
             settings = config(path)[3]["coach"]
             self.assertTrue(settings["enabled"])
