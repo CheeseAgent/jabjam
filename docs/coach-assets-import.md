@@ -24,6 +24,26 @@ git push origin feat/coach-avatar-stage1
 
 如果已经有同名素材目录，安装器会拒绝覆盖，先人工核对版本而不是强制清空。请将推送后 commit SHA 记录在 PR #11。
 
+## 无 ZIP 方案：直接导入独立 PNG 的 Git 二进制补丁
+
+如果通过 ChatGPT 获取到 `JabJam-小奶茶-29部件-独立PNG-Git补丁.patch`，**不需要解压任何 ZIP**。
+该补丁是通过 `git format-patch --binary` 导出的真实提交，包含 `assets/coaches/milktea/parts/` 下 29 个 PNG、`rig_manifest.json`、素材 README、修复对照图。它不会在仓库中创建 ZIP 文件。
+
+补丁 SHA-256：`a6ab22d832039e413735b3baf781233ae06a1672d9cc7cb780550aaca543834d`（3,949,592 字节）。
+本地以另一独立 Git 仓库执行 `git am` 验证通过，并逐字节比较 29 张 PNG。
+
+```bash
+git fetch origin
+git switch feat/coach-avatar-stage1
+git pull --ff-only
+sha256sum /path/to/JabJam-小奶茶-29部件-独立PNG-Git补丁.patch
+git am /path/to/JabJam-小奶茶-29部件-独立PNG-Git补丁.patch
+git status --short
+git push origin feat/coach-avatar-stage1
+```
+
+如果 `git am` 失败，不要执行强推。先用 `git am --abort` 回到原状，再核对是否已存在同名素材。上传并推送完以后，GitHub 显示的是可独立修改的图片，而非补丁或 ZIP。**截至文档更新时，图片仍尚未远程入库。**
+
 ## 验收
 
 - 29 张 PNG 和 `rig_manifest.json` 都存在，并且清单引用的文件与实际图片完全一致。
