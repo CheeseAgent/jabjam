@@ -27,6 +27,10 @@
 
 导出成功会生成与 MP4 同名的 `.chart.json`，记录每段能量、所有实际出拳时间、BPM 和置信度。若听感持续偏早/偏晚，在 Actions 的 `beat_offset_ms` 中输入 -100 或 100（负值提前、正值延后，范围 ±250ms）。这个校准不能修正错误的 BPM、半速/倍速误判或变速歌曲。复杂歌曲仍需要进一步改造节拍追踪。
 
+## 固定组合拳练习（padwork）
+
+当音乐强度上升，拳组会从「直直」切换为「直直摆」，再到「直直摆勾直」。这是固定的训练乐句模板，不是每个拳点随机选动作，也不是已经实现真实歌曲的主副歌识别。视频会给出当前组合与第几拳的提示；Easy 自动练习不启用长组合。
+
 ## 导出入口
 
 在装有 Godot 4.6.3 Standard、Python 3、Pillow、Noto CJK 字体、FFmpeg 和 ffprobe 的 Linux 环境中执行：
@@ -40,7 +44,7 @@ python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
 
 ## 写一份课程
 
-**自动编排**时，把 `actions` 设为 `"auto"`。`easy` 只排左右直拳；`normal` 默认排直拳和摆拳。想加入上勾拳和成对的侧步，在 `course` 里同时设置 `"difficulty": "normal"` 和 `"movement_set": "mixed"`。省略 `movement_set` 的旧课程沿用 `classic`。仓库的[默认课程](courses/neon-round.json)已经启用混合编排。
+**自动编排**时，把 `actions` 设为 `"auto"`。新增 `"movement_set": "padwork"`（与 `"difficulty": "normal"` 搭配）：教练按完整乐句喂靶，依照音乐强度循环 **直直摆**、**直直摆勾直** 等固定组合，并左右起手交替，组合之间留恢复拍。画面会显示组合名和当前拳序。默认 [neon-round.json](courses/neon-round.json) 已切换为此模式；旧的 `classic`、`mixed` 均保留。详情见 [视频导出指南](docs/video-export.md)。
 
 **手排**时，在 `actions` 数组里写清每个动作及其相对音乐开头的秒数。下面是一份可直接导出的课程，用内置音乐先练左摆拳和右上勾拳，再向左侧步、向右回位：
 
