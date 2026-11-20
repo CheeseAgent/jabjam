@@ -34,8 +34,8 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("Expected config version 1")
     course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap", "movement_set", "beat_offset_ms"), "course")
-    if course.get("movement_set", "classic") not in ("classic", "mixed"):
-        raise ValueError("movement_set must be classic or mixed")
+    if course.get("movement_set", "classic") not in ("classic", "mixed", "padwork"):
+        raise ValueError("movement_set must be classic, mixed or padwork")
     if song_title is not None:
         course["song_title"] = song_title
     if "song_title" in course:
@@ -126,7 +126,7 @@ def prepare(course, music, actions, tmp):
             for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
     title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
-    return audio, duration, arrange(notes, course, actions == "auto"), title[:128], chart
+    return audio, duration, arrange(notes, course, actions == "auto", chart), title[:128], chart
 
 
 def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None):
