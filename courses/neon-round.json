@@ -3,7 +3,7 @@
   "course": {
     "music": "builtin:demo",
     "difficulty": "normal",
-    "movement_set": "mixed",
+    "movement_set": "padwork",
     "bpm": 120
   },
   "actions": "auto",
