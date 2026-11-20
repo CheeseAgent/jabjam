@@ -23,8 +23,20 @@ func _sample() -> void:
 			while parent != coach.rig:
 				xf = parent.transform * xf
 				parent = parent.get_parent()
-			world[id] = [xf.origin.x, xf.origin.y, xf.get_rotation()]
-		frames.append({"pose": coach.pose_at(t), "world": world})
+			world[id] = [xf.origin.x, xf.origin.y, xf.get_rotation(), xf.get_scale().x]
+		var zooms := {}
+		var fronts := {}
+		for id: String in coach.rig.artwork:
+			zooms[id] = coach.rig.artwork[id].scale.x
+		for id: String in coach.rig.front_panels:
+			var panel: Sprite2D = coach.rig.front_panels[id]
+			if panel.visible:
+				fronts[id] = [panel.position.x, panel.position.y, panel.scale.x, panel.z_index]
+		var yaw := {}
+		for id: String in coach.rig.surfaces:
+			yaw[id] = coach.rig.surfaces[id].get_shader_parameter("yaw")
+		frames.append({"pose": coach.pose_at(t), "world": world, "zooms": zooms, "fronts": fronts,
+				"yaw": yaw, "face": coach.rig.faces.find_key(coach.rig.face_sprite.texture)})
 	var out := FileAccess.open(args[1], FileAccess.WRITE)
 	out.store_string(JSON.stringify(frames, "", true, true))
 	out.close()

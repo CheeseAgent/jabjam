@@ -99,6 +99,21 @@ def wrist(sheet, name):
     return isolate(im)
 
 
+def glove_front(glove, side):
+    """Lift the padded knuckles off the cuff along its original ink line."""
+    rim = [(0,52), (24,47.5), (30,42), (38,37.6), (47,34), (58,31.3), (70,30),
+           (80,30), (91,31.3), (101,33.6), (110,37.6), (118,42.6), (125,47.5), (150,52)]
+    if side == "right":
+        rim = [(150-x,y) for x,y in reversed(rim)]
+    mask = Image.new("L", (4*glove.width,4*glove.height))
+    outline = [*rim, (glove.width,glove.height), (0,glove.height)]
+    ImageDraw.Draw(mask).polygon([(round(x*4),round(y*4)) for x,y in outline],fill=255)
+    pixels = np.array(glove)
+    pixels[:,:,3] = np.asarray(mask.resize(glove.size,Image.Resampling.LANCZOS)) * (pixels[:,:,3]/255.)
+    pixels[pixels[:,:,3] == 0] = 0
+    return Image.fromarray(pixels)
+
+
 def faces(head, sheet):
     # Reconstruct only the fur underneath removable features. A harmonic fill
     # extends colour from their intact boundaries, preserving cheeks and band.
@@ -186,6 +201,8 @@ def main():
                                                       cx-x0+rx+3, cy-y0+ry+3), fill=255)
                     ink.putalpha(Image.fromarray(np.minimum(np.asarray(alpha),np.asarray(zone))))
                     ink.save(dest / ("ink_"+name+".png"))
+                if name.startswith("glove_"):
+                    glove_front(part, name.split("_")[1]).save(dest / (name+"_front.png"))
                 repair_caps(part, name).save(dest / (name+".png"))
 
 

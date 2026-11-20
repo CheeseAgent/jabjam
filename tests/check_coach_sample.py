@@ -10,6 +10,8 @@ from render_video_job import ROOT, frame, verify_course
 
 sys.path.insert(0, str(ROOT / "video"))
 from arena import Arena
+from coach_timeline import TIMING
+from movements import MOVEMENTS
 
 
 def verify(path):
@@ -19,13 +21,23 @@ def verify(path):
     fps = course["picture"]["fps"]
     # Crop tightly around the character to keep HUD text and scene motion out of the metric.
     region = (995,295,1274,625)
-    sample_frames = [0]
+    sample_frames = {0}
     for note in course["actions"]:
         hit = math.ceil(note["time"]*fps)
-        sample_frames.extend(hit+offset for offset in (-4,-1,0,4))
-    sample_frames.append(math.ceil((course["actions"][-1]["time"]+1.1)*fps))
+        kind = MOVEMENTS[note["action"]].kind
+        prepare = TIMING["cutout"]["prepare"][kind]
+        sample_frames.update(hit+offset for offset in (-4,-1,0,4))
+        sample_frames.update(hit-round(prepare*u*fps) for u in (.75,.50))
+        if kind == "step":
+            # Planted front foot, trailing foot in the air, then both feet settled.
+            offsets = [TIMING["strike"]+TIMING["cutout"]["step_recover"]*u for u in (.48,.90,1.05)]
+        else:
+            # Two idle frames on either side of the facial hold's boundary.
+            offsets = [TIMING["cutout"]["focus"]["hold"]+delta for delta in (-.10,.10)]
+        sample_frames.update(hit+round(dt*fps) for dt in offsets)
+    sample_frames.add(math.ceil((course["actions"][-1]["time"]+1.1)*fps))
     worst = 0.
-    for n in sample_frames:
+    for n in sorted(sample_frames):
         t = n/fps
         reference = arena.frame(t).crop(region)
         decoded = frame(path,t).crop(region)

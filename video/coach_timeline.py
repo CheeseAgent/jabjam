@@ -22,6 +22,9 @@ class CoachPose:
     state: str
     action: Optional[str]
     phase: float
+    stance: int = 0  # Planted position before this cue, in strides.
+    # A standalone editor/plate pose has no song timestamp.
+    focused: Optional[bool] = None
 
 
 def validate_coach_config(value):
@@ -53,8 +56,9 @@ def validate_coach_config(value):
 class CoachTimeline:
     """Stateless pose selection: t is always seconds since the song began."""
 
-    def __init__(self, notes, celebrate=False):
-        self.celebrate = celebrate
+    def __init__(self, notes, celebrate=False, *, cutout=False):
+        self.cutout = cutout
+        self.celebrate = celebrate or cutout
         self.notes = notes
         self.times = [note["time"] for note in notes]
         if any(a >= b for a, b in zip(self.times, self.times[1:])):
@@ -62,27 +66,59 @@ class CoachTimeline:
         if any(note["action"] not in MOVEMENTS for note in notes):
             raise ValueError("Coach timeline received an unknown action")
 
+        self.stances = [0]
+        self.focus_starts, self.focus_ends = [], []
+        face = TIMING["cutout"]["focus"]
+        for note in notes:
+            movement = MOVEMENTS[note["action"]]
+            step = movement.side if cutout and movement.kind == "step" else 0
+            self.stances.append(max(-1, min(1, self.stances[-1] + step)))
+            if cutout and movement.kind != "step":
+                start = max(0., note["time"] - face["lead"])
+                end = note["time"] + face["hold"]
+                if self.focus_ends and start <= self.focus_ends[-1] + face["merge_gap"]:
+                    self.focus_ends[-1] = end
+                else:
+                    self.focus_starts.append(start)
+                    self.focus_ends.append(end)
+
     def at(self, t):
         if not math.isfinite(t) or t < 0:
             raise ValueError("Coach time must be a nonnegative, finite song timestamp")
         index = bisect_right(self.times, t)
+        face_index = bisect_right(self.focus_starts, t) - 1
+        focused = face_index >= 0 and t < self.focus_ends[face_index]
         previous = self.notes[index - 1] if index else None
         upcoming = self.notes[index] if index < len(self.notes) else None
-        # Start the next wind-up after the preceding punch has visibly landed.
+        prepare, strike, recover = PREPARE_SECONDS, STRIKE_SECONDS, RECOVER_SECONDS
+        landing = TIMING["minimum_landing"]
+        if self.cutout:
+            profile = TIMING["cutout"]
+            if upcoming:
+                prepare = profile["prepare"][MOVEMENTS[upcoming["action"]].kind]
+                prepare = min(prepare, upcoming["time"])
+            if previous and MOVEMENTS[previous["action"]].kind == "step":
+                recover = profile["step_recover"]
+            if previous and upcoming:
+                # Share a short gap between full curves instead of skipping the load
+                # or interrupting the trailing foot. The authored hit stays fixed.
+                gap = upcoming["time"] - previous["time"]
+                fit = min(1., gap / (strike + recover + prepare))
+                prepare, strike, recover = prepare*fit, strike*fit, recover*fit
+            landing = 0.
         if upcoming:
             until_hit = upcoming["time"] - t
             after_previous = t - previous["time"] if previous else float("inf")
-            if 0 < until_hit <= PREPARE_SECONDS and after_previous >= TIMING["minimum_landing"]:
-                return CoachPose("prepare", upcoming["action"], 1 - until_hit / PREPARE_SECONDS)
+            if 0 < until_hit <= prepare and after_previous >= landing:
+                return CoachPose("prepare", upcoming["action"], 1-until_hit/prepare, self.stances[index], focused)
         if previous:
             elapsed = t - previous["time"]
-            if elapsed < STRIKE_SECONDS:
-                return CoachPose("strike", previous["action"], elapsed / STRIKE_SECONDS)
-            if elapsed < STRIKE_SECONDS + RECOVER_SECONDS:
-                return CoachPose("recover", previous["action"],
-                                 (elapsed - STRIKE_SECONDS) / RECOVER_SECONDS)
+            if elapsed < strike:
+                return CoachPose("strike", previous["action"], elapsed/strike, self.stances[index-1], focused)
+            if elapsed < strike + recover:
+                return CoachPose("recover", previous["action"], (elapsed-strike)/recover, self.stances[index-1], focused)
             if self.celebrate and not upcoming:
-                phase = (elapsed - STRIKE_SECONDS - RECOVER_SECONDS) / TIMING["celebrate"]
+                phase = (elapsed - strike - recover) / TIMING["celebrate"]
                 if 0 <= phase < 1:
-                    return CoachPose("celebrate", None, phase)
-        return CoachPose("idle", None, (t % IDLE_SECONDS) / IDLE_SECONDS)
+                    return CoachPose("celebrate", None, phase, self.stances[index], focused)
+        return CoachPose("idle", None, (t % IDLE_SECONDS)/IDLE_SECONDS, self.stances[index], focused)

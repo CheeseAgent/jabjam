@@ -1,10 +1,17 @@
 @tool
 extends Node2D
 ## A rigid cutout puppet. The host supplies an absolute timeline state and phase.
+const TurnShader = preload("res://scripts/coach_turn.gdshader")
 const DIR := "res://assets/coaches/milktea/rig/"
 var canvas_size := Vector2(480, 596)
 var bones: Array = []
 var joints := {}
+var artwork := {}
+var front_panels := {}
+var surfaces := {}
+var turns := {}
+var shoulder := {}
+var stride := 0.0
 var faces := {}
 var face_sprite: Sprite2D
 var poses := {}
@@ -36,9 +43,12 @@ func _ready() -> void:
 	var rig: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DIR + "rig.json"))
 	var motion: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DIR + "motions.json"))
 	assert(rig.format == "jabjam.cutout" and rig.version == 1)
-	assert(motion.format == "jabjam.rig-motion" and motion.version == 1)
+	assert(motion.format == "jabjam.rig-motion" and (motion.version == 1 or motion.version == 2))
 	bones = rig.bones
 	canvas_size = _vector(rig.canvas)
+	stride = float(motion.get("stride_px", 0))
+	turns = motion.get("turns", {})
+	shoulder = rig.get("shoulder_projection", {})
 	poses = motion.poses
 	motions = motion.motions
 	for bone: Dictionary in bones:
@@ -47,9 +57,20 @@ func _ready() -> void:
 		var parent: Node2D = self if bone.parent == null else joints[bone.parent]
 		parent.add_child(joint)
 		joints[bone.id] = joint
+		var art := Node2D.new()
+		joint.add_child(art)
+		artwork[bone.id] = art
 		if bone.has("underlay"):
-			_sprite(joint, bone, bone.underlay, 1)
-		var sprite := _sprite(joint, bone, bone.texture, int(bone.z))
+			_sprite(art, bone, bone.underlay, 1)
+		var sprite := _sprite(art, bone, bone.texture, int(bone.z))
+		if bone.has("surface"):
+			var material := ShaderMaterial.new()
+			material.shader = TurnShader
+			material.set_shader_parameter("depth", float(bone.surface.depth))
+			sprite.material = material
+			surfaces[bone.id] = material
+		if bone.has("front"):
+			front_panels[bone.id] = _sprite(joint, bone, bone.front.texture, int(bone.z)+1)
 		if bone.has("variants"):
 			face_sprite = sprite
 			for variant: String in bone.variants:
@@ -92,7 +113,22 @@ func _opposite(id: String) -> String:
 		return id.trim_suffix("_right") + "_left"
 	return id
 
-func apply_pose(state: String, action: String, phase: float) -> void:
+func _project_art(bone: Dictionary, zoom: float) -> void:
+	var art: Node2D = artwork[bone.id]
+	if bone.has("front"):
+		var front: Dictionary = bone.front
+		var depth := clampf((zoom-1.0)/(float(front.zoom)-1.0), 0.0, 1.0)
+		var panel: Sprite2D = front_panels[bone.id]
+		panel.visible = depth > 0.0
+		if panel.visible:
+			var weight := 1.0 - (1.0-depth)/zoom
+			var pivot := _vector(bone.pivot).lerp(_vector(front.pivot), weight)
+			panel.scale = Vector2.ONE * float(bone.scale) * zoom
+			panel.position = -pivot * panel.scale
+			zoom = lerpf(1.0, front.cuff_scale, depth)
+	art.scale = Vector2.ONE * zoom
+
+func apply_pose(state: String, action: String, phase: float, stance := 0, focused: Variant = null) -> void:
 	var kind := state
 	if action.begins_with("step_"):
 		kind = "step"
@@ -107,17 +143,40 @@ func apply_pose(state: String, action: String, phase: float) -> void:
 	var start: Dictionary = poses[keys[i-1][1]]
 	var finish: Dictionary = poses[keys[i][1]]
 	var sign_x := -1.0 if mirror else 1.0
+	var turn0 := _vector(turns.get(keys[i-1][1], [0,0]))
+	var turn1 := _vector(turns.get(keys[i][1], [0,0]))
+	var yaw := turn0.lerp(turn1, amount) * (PI/180.0) * sign_x
 	for bone: Dictionary in bones:
 		var key := _opposite(bone.id) if mirror else str(bone.id)
 		var a: Array = start.get(key, [0, 0, 0])
 		var b: Array = finish.get(key, [0, 0, 0])
 		var joint: Node2D = joints[bone.id]
 		var offset := _vector(a).lerp(_vector(b), amount)
-		joint.position = _vector(bone.at) + Vector2(sign_x * offset.x, offset.y)
+		if bone.has("surface"):
+			var turn_angle := yaw.x if bone.surface.turn == "hips" else yaw.y
+			surfaces[bone.id].set_shader_parameter("yaw", turn_angle*float(bone.surface.amount))
+		if bone.parent == null:
+			if stride > 0 and kind == "step" and stance == (1 if mirror else -1):
+				offset.x = 0.0
+			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x + stance*stride, offset.y)
+		else:
+			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x, offset.y)
+		if bone.has("shoulder_side"):
+			var near := -float(bone.shoulder_side) * sin(yaw.y)
+			var perspective := 1.0 + near*float(shoulder.depth_scale)
+			joint.position.x *= cos(yaw.y)*perspective
+			joint.position.y += near*float(shoulder.drop_px)
+			joint.scale = Vector2.ONE * perspective
+		var zoom_a := float(a[3]) if a.size() == 4 else 1.0
+		var zoom_b := float(b[3]) if b.size() == 4 else 1.0
+		_project_art(bone, lerpf(zoom_a, zoom_b, amount))
 		joint.rotation_degrees = float(bone.get("angle", 0)) + sign_x * lerpf(a[2], b[2], amount)
 	var expression := "open"
-	if state == "celebrate" and phase >= 0.10 and phase <= 0.90:
-		expression = "happy"
-	elif state == "strike" and kind != "step":
+	if focused:
 		expression = "focus"
+	elif state == "celebrate" and phase >= 0.10 and phase <= 0.90:
+		expression = "happy"
+	elif focused == null and not action.is_empty() and kind != "step":
+		if state == "strike" or (state == "prepare" and phase >= 0.35) or (state == "recover" and phase < 0.5):
+			expression = "focus"
 	face_sprite.texture = faces[expression]

@@ -161,7 +161,7 @@ class CoachLayer:
         self.enabled = self.settings["enabled"]
         if self.enabled:
             backend = self.settings["renderer"]
-            self.timeline = CoachTimeline(notes, celebrate=backend == "rig")
+            self.timeline = CoachTimeline(notes, cutout=backend == "rig")
             if backend == "vector":
                 self.renderer = VectorCoach()
             elif backend == "sprite":
