@@ -129,6 +129,7 @@ def main():
     p.add_argument("--song-title")
     p.add_argument("--difficulty", choices=("easy", "normal"))
     p.add_argument("--min-gap", type=float)
+    p.add_argument("--beat-offset-ms", type=float)
     args=p.parse_args()
     config=json.loads(args.config.read_text())
     started=time.monotonic()
