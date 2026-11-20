@@ -4,6 +4,16 @@ Status: stage-1 scaffold. No commissioned character artwork or completed sprite 
 The Python/Pillow vector rabbit is deliberately a **stand-in**, not the final 小奶茶 likeness.
 Keep changes to the editor, rhythm logic, and final frame compositor independent.
 
+## Real deployment topology (confirmed 2026-11-20)
+
+- **DSF lives on the user's personal Alibaba Cloud Chengdu server** and is an orchestration / maintenance agent. Do **not** assign MP4 rendering to this low-resource server.
+- **CheeseAgent/jabjam** is the public source of truth for app and render-engine code. The coach scaffold and draft PR #11 live here.
+- **CheeseAgent/jabjam-render** is the PRIVATE GitHub Actions rendering repository; it holds private music, including the Try Everything test track. A workflow run there rendered successfully on 2026-11-20. Never migrate private music into the public project.
+- **GitHub-hosted Actions** do CPU-intensive offline video encoding; the server only submits jobs, tracks status and consumes artifacts.
+- The present PR **does not automatically update jabjam-render**. The two repositories have diverged; before a production coach video, align the private render workflow with a specific tested public-engine SHA. Avoid manually maintaining duplicate copies of choreography or avatar modules indefinitely.
+- Recommended future integration: have the private workflow check out a pinned revision of the public engine separately from the private audio/lesson inputs, then mount the latter read-only into offline rendering. Build an explicit manifest of source SHA and course/audio hash for reproducibility, but never publish private audio or its contents through public CI.
+- First verify that the private-workflow interface and checkout/mount assumptions are compatible; do not overwrite the private repository or force-merge its history. Keep a safe legacy render fallback until the new pipeline passes one complete MP4 smoke test.
+
 ## Data and dependency boundaries
 
 1. Upstream course/arranger produces timestamped actions in seconds since song start.
