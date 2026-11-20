@@ -87,10 +87,9 @@ class VideoPacing(unittest.TestCase):
             self.assertEqual([n["combo_step"] for n in group],
                              list(range(1, len(group) + 1)))
             kinds = [MOVEMENTS[n["action"]].kind for n in group]
-            if len(group) == 5:
-                self.assertEqual(kinds, ["jab", "jab", "hook", "uppercut", "jab"])
-            if len(group) == 3:
-                self.assertEqual(kinds, ["jab", "jab", "hook"])
+            from choreography import PADWORK_COMBOS
+            templates = {t[0]: t[2] for group in PADWORK_COMBOS.values() for t in group}
+            self.assertEqual(kinds, list(templates[group[0]["combo_id"]]))
         for a, b in zip(result, result[1:]):
             self.assertGreaterEqual(b["time"] - a["time"] + 1e-8,
                  __import__("choreography").required_gap(
