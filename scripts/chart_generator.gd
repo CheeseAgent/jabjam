@@ -1,6 +1,6 @@
 extends RefCounted
 ## Deterministic local heuristic, not semantic mood or variable-tempo recognition.
-const VERSION := "energy-grid-v1"
+const VERSION := "energy-grid-v2"
 const STEP := 0.02
 const SAMPLE_RATE := 8000.0
 const ACTIONS := ["left_jab", "right_jab", "left_hook", "right_hook"]
@@ -53,6 +53,22 @@ static func analyze(stream: AudioStream, progress: Callable = Callable()) -> Dic
 	return {"energy": energy, "novelty": novelty, "peak": peak,
 		"estimated_bpm": 60.0 / (best_lag * STEP), "confidence": confidence}
 
+static func _align_to_onset(time: float, novelty: PackedFloat32Array, peak: float, period: float) -> float:
+	# Refine an already estimated beat on a nearby transient without chasing every hi-hat.
+	var radius := minf(0.065, period * 0.13)
+	var center := int(round(time / STEP))
+	var reach := maxi(1, int(ceil(radius / STEP)))
+	var strongest := -1.0
+	var winner := center
+	for i in range(maxi(1, center - reach), mini(novelty.size() - 1, center + reach + 1)):
+		if novelty[i] > strongest:
+			strongest = novelty[i]
+			winner = i
+	if peak > 0.0 and strongest > peak * 0.14:
+		return lerpf(time, winner * STEP, 0.75)
+	return time
+
+
 static func generate(analysis: Dictionary, song_id: String, duration: float,
 		difficulty: String = "normal", bpm_override: float = 0.0) -> Dictionary:
 	if analysis.has("error"):
@@ -73,47 +89,69 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 		if phase_scores[i] > phase_scores[phase_index]:
 			phase_index = i
 	var phase := float(phase_index) / bins * period
-	var minimum_gap := 1.1 if difficulty == "easy" else 0.7
-	var stride := maxi(1, int(ceil(minimum_gap / period)))
+	var onset_peak := 0.0
+	for value in novelty:
+		onset_peak = maxf(onset_peak, value)
+	var minimum_gap := 1.1 if difficulty == "easy" else 0.45
 	var notes: Array[Dictionary] = []
 	var sections: Array[Dictionary] = []
-	# Four-second energy regions produce rests and quieter/livelier phrases.
+	# Describe the dynamic envelope: a four-second section is NOT a verse/chorus classifier.
+	var maximum_region := 0.0001
 	for begin in range(0, energy.size(), 200):
 		var total := 0.0
 		for i in range(begin, mini(begin + 200, energy.size())):
 			total += energy[i]
-		sections.append({"time": begin * STEP, "energy": total / mini(200, energy.size() - begin)})
-	var maximum_region := 0.0001
-	for section in sections:
-		maximum_region = maxf(maximum_region, section.energy)
+		var average := total / mini(200, energy.size() - begin)
+		sections.append({"time": begin * STEP, "energy": average})
+		maximum_region = maxf(maximum_region, average)
+	# Avoid a hard four-second step at each boundary.
+	for i in range(sections.size()):
+		var before: float = sections[maxi(0, i - 1)].energy
+		var current: float = sections[i].energy
+		var after: float = sections[mini(sections.size() - 1, i + 1)].energy
+		sections[i]["intensity"] = (before + current * 2.0 + after) / (4.0 * maximum_region)
 	var beat := 0
-	var phrase := song_id.substr(0, 8).hex_to_int() % 2
 	while phase + beat * period < duration - 0.5:
-		var time := phase + beat * period
+		var grid_time := phase + beat * period
+		var beat_in_phrase := beat % 8
 		beat += 1
-		if time < 3.0 or (beat - 1) % stride != 0:
+		if grid_time < 3.0:
 			continue
-		var region: Dictionary = sections[mini(int(time / 4.0), sections.size() - 1)]
-		var level: float = region.energy / maximum_region
-		if level < 0.08 or (level < 0.45 and (beat - 1) % (stride * 2) != 0):
+		var region: Dictionary = sections[mini(int(grid_time / 4.0), sections.size() - 1)]
+		var level: float = region.intensity
+		if level < 0.09:
 			continue
-		# Skip truly silent local windows, even inside an otherwise loud region.
+		var active := false
+		if difficulty == "easy":
+			active = beat_in_phrase in [0, 4] if level < 0.65 else beat_in_phrase in [0, 2, 4, 6]
+		elif level >= 0.68:
+			# Two short three-punch runs per 8 beats, separated by deliberate rests.
+			active = beat_in_phrase in [0, 1, 2, 4, 5, 6]
+		elif level >= 0.35:
+			active = beat_in_phrase in [0, 2, 4, 6]
+		else:
+			active = beat_in_phrase in [0, 4]
+		if not active:
+			continue
+		# Avoid plotting a note over actual silence even inside a loud section.
 		var local_peak := 0.0
-		var frame := int(time / STEP)
+		var frame := int(grid_time / STEP)
 		for i in range(maxi(0, frame - 8), mini(frame + 9, energy.size())):
 			local_peak = maxf(local_peak, energy[i])
 		if local_peak < maxf(0.001, float(analysis.peak) * 0.025):
 			continue
+		var time := _align_to_onset(grid_time, novelty, onset_peak, period)
 		if not notes.is_empty():
 			var previous: Dictionary = notes.back()
-			var recovery := maxf(minimum_gap, 1.0) if str(previous.action).ends_with("hook") else minimum_gap
-			# One extra recovery beat after each eight-note phrase.
-			if notes.size() % 8 == 0:
-				recovery = maxf(recovery, period * 2.0)
+			var recovery := minimum_gap
+			if str(previous.action).ends_with("hook"):
+				recovery = maxf(recovery, 0.90)
 			if time - float(previous.time) < recovery - 0.001:
 				continue
+		# Phrase-relative hooks rather than every N accepted notes. Hand alternation
+		# is maintained across rests; an eight-beat burst has a natural reset.
 		var hand := notes.size() % 2
-		var hook := difficulty == "normal" and level >= 0.45 and (notes.size() + phrase * 4) % 8 in [2, 5]
+		var hook := difficulty == "normal" and level >= 0.68 and beat_in_phrase in [2, 6]
 		var action: String = ACTIONS[hand + (2 if hook else 0)]
 		notes.append({"time": snappedf(time, 0.001), "action": action})
 	if notes.size() < 4:
@@ -122,6 +160,7 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 	return {"id": chart_id, "song_id": song_id, "version": VERSION, "difficulty": difficulty,
 		"bpm_override": bpm_override, "bpm": snappedf(bpm, 0.1), "confidence": analysis.confidence,
 		"duration": duration, "notes": notes, "sections": sections}
+
 
 static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 	if chart.get("version") != VERSION or chart.get("song_id") != song_id:
@@ -143,7 +182,7 @@ static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 		if typeof(note.get("time")) not in [TYPE_INT, TYPE_FLOAT]:
 			return false
 		var time := float(note.get("time", -1))
-		if not is_finite(time) or time < 3.0 or time > duration - 0.4 or time - previous < 0.65:
+		if not is_finite(time) or time < 3.0 or time > duration - 0.4 or time - previous < 0.43:
 			return false
 		previous = time
 	return true

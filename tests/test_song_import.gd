@@ -48,9 +48,9 @@ static func run(tree: SceneTree, check: Callable) -> void:
 			safe = false
 		if i > 0:
 			var previous: Dictionary = chart.notes[i - 1]
-			if note.time - previous.time < 0.699 or str(note.action).begins_with("left") == str(previous.action).begins_with("left"):
+			if note.time - previous.time < 0.429 or str(note.action).begins_with("left") == str(previous.action).begins_with("left"):
 				safe = false
-			if str(previous.action).ends_with("hook") and note.time - previous.time < 0.999:
+			if str(previous.action).ends_with("hook") and note.time - previous.time < 0.899:
 				safe = false
 		if note.time < 8:
 			quiet_count += 1
@@ -59,7 +59,12 @@ static func run(tree: SceneTree, check: Callable) -> void:
 	check.call(safe, "Notes alternate hands, allow recovery and skip silence")
 	var actions: Array = chart.notes.map(func(note: Dictionary) -> String: return note.action)
 	check.call("left_hook" in actions and "right_hook" in actions, "Normal arrangement includes hooks from both hands")
-	check.call(loud_count >= quiet_count, "Louder phrase is at least as active as the quiet phrase")
+	check.call(loud_count > quiet_count * 2, "Loud phrase has more than double the quiet phrase cue density")
+	var on_grid := true
+	for note in chart.notes:
+		if absf(note.time - roundf(note.time / 0.5) * 0.5) > 0.08:
+			on_grid = false
+	check.call(on_grid, "Synthetic pulse cues stay within 80ms of the true beat")
 	check.call(Generator.analyze(fixture(120.0, true)).has("error"), "Silent input is rejected")
 	var root_path := "user://import-tests"
 	DirAccess.make_dir_recursive_absolute(root_path)

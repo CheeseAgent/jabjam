@@ -224,6 +224,10 @@ class Arena:
         text(im,(640,650),label,26,WHITE,True,"center")
         hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
         text(im,(640,692),hint,15,DUSK,False,"center")
+        if index < len(self.notes) and self.notes[index].get("combo_name"):
+            note = self.notes[index]
+            caption = f"组合拳  /  {note['combo_name']}     {note['combo_step']}/{note['combo_total']}"
+            text(im,(640,107),caption,25,WHITE,True,"center")
         elapsed=int(t)
         text(im,(42,104),f"{elapsed//60:02d}:{elapsed%60:02d}",25,WHITE,True)
         text(im,(1234,106),f"{index:02d}  /  {len(self.notes):02d}",22,DUSK,True,"right")

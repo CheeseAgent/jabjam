@@ -129,11 +129,12 @@ def main():
     p.add_argument("--song-title")
     p.add_argument("--difficulty", choices=("easy", "normal"))
     p.add_argument("--min-gap", type=float)
+    p.add_argument("--beat-offset-ms", type=float)
     args=p.parse_args()
     config=json.loads(args.config.read_text())
     started=time.monotonic()
     cmd = [sys.executable, str(ROOT/"video/export.py"), args.config, args.output]
-    for flag, value in (("--song-title", args.song_title), ("--difficulty", args.difficulty), ("--min-gap", args.min_gap)):
+    for flag, value in (("--song-title", args.song_title), ("--difficulty", args.difficulty), ("--min-gap", args.min_gap), ("--beat-offset-ms", args.beat_offset_ms)):
         if value is not None:
             cmd.extend([flag, str(value)])
     subprocess.run(cmd, check=True)
