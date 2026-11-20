@@ -21,6 +21,15 @@ on:
       beat_offset_ms:
         description: 自动谱拍点校准（毫秒，-250 到 +250；正数延后）
         type: string
+      scene:
+        description: 场景（course 沿用课程，neon 动态霓虹，classic 经典）
+        type: choice
+        options: [course, neon, classic]
+        default: course
+      verify_samples:
+        description: 额外生成验收短片并跑三分钟压力测试
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'video/**'
@@ -28,6 +37,8 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - 'Dockerfile'
+      - '.dockerignore'
+      - 'project.godot'
       - '.github/workflows/render-video.yml'
   push:
     branches: [main]
@@ -37,9 +48,15 @@ on:
       - 'scripts/**'
       - 'tests/**'
       - 'Dockerfile'
+      - '.dockerignore'
+      - 'project.godot'
       - '.github/workflows/render-video.yml'
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   render:
@@ -51,41 +68,99 @@ jobs:
       DIFFICULTY: ${{ inputs.difficulty || 'course' }}
       MIN_GAP: ${{ inputs.min_gap }}
       BEAT_OFFSET_MS: ${{ inputs.beat_offset_ms }}
+      SCENE: ${{ inputs.scene || 'course' }}
+      VERIFY_SAMPLES: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_samples }}
+      ARTIFACT_NAME: jabjam-follow-along-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
       - uses: actions/checkout@v5
       - name: Build the offline renderer
         run: docker build --platform linux/amd64 --target video-export -t jabjam-video .
-      - name: Render and verify courses, movement fixtures and three-minute load test
+      - name: Check the course and render offline
         shell: bash
         run: |
-          set -eu
+          set -euo pipefail
           mkdir -p build/video
-          limits=(--rm --network none --cpus 2 --memory 300000000 --memory-swap 300000000)
-          mount=(--user "$(id -u):$(id -g)" -v "$PWD/build/video:/out")
-          docker run "${limits[@]}" jabjam-video python3 tests/test_video_pacing.py
+          out=build/video
+          offline() {
+            docker run --rm --network none --cpus 2 --memory 300000000 --memory-swap 300000000 \
+              --user "$(id -u):$(id -g)" -v "$PWD/$out:/app/$out" jabjam-video "$@"
+          }
           options=()
-          if [[ -n "$SONG_TITLE" ]]; then options+=(--song-title "$SONG_TITLE"); fi
-          if [[ "$DIFFICULTY" != course ]]; then options+=(--difficulty "$DIFFICULTY"); fi
-          if [[ -n "$MIN_GAP" ]]; then options+=(--min-gap "$MIN_GAP"); fi
-          if [[ -n "$BEAT_OFFSET_MS" ]]; then options+=(--beat-offset-ms "$BEAT_OFFSET_MS"); fi
-          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/render_video_job.py "$COURSE" /out/jabjam.mp4 "${options[@]}"
-          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/render_video_job.py courses/four-punches.json /out/four-punches.mp4 --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4
-          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/render_video_job.py courses/eight-moves.json /out/eight-moves.mp4
-          docker run "${limits[@]}" "${mount[@]}" jabjam-video \
-            python3 tests/check_eight_moves.py /out/eight-moves.mp4
-          docker run "${limits[@]}" "${mount[@]}" jabjam-video sh -eu -c '
+          if [[ -n "$SONG_TITLE" ]]; then options+=("--song-title=$SONG_TITLE"); fi
+          if [[ "$DIFFICULTY" != course ]]; then options+=("--difficulty=$DIFFICULTY"); fi
+          if [[ -n "$MIN_GAP" ]]; then options+=("--min-gap=$MIN_GAP"); fi
+          if [[ -n "$BEAT_OFFSET_MS" ]]; then options+=("--beat-offset-ms=$BEAT_OFFSET_MS"); fi
+          if [[ "$SCENE" != course ]]; then options+=("--scene=$SCENE"); fi
+
+          echo "::group::Course settings"
+          offline python3 -S video/export.py "./$COURSE" --check "${options[@]}"
+          echo "::endgroup::"
+
+          echo "::group::Editable course and selected MP4"
+          offline python3 video/export.py "./$COURSE" --write-course "$out/jabjam-course.json" "${options[@]}"
+          offline python3 -S video/export.py "$out/jabjam-course.json" --check
+          offline python3 tests/render_video_job.py "./$COURSE" "$out/jabjam.mp4" "${options[@]}"
+          echo "::endgroup::"
+
+          if [[ "$VERIFY_SAMPLES" != true ]]; then exit 0; fi
+          echo "::group::Pacing and authoring tests"
+          offline python3 tests/test_video_pacing.py
+          echo "::endgroup::"
+
+          echo "::group::Four-punch waveform and eight-movement frames"
+          offline python3 tests/render_video_job.py courses/four-punches.json "$out/four-punches.mp4" \
+            --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4 --scene classic
+          offline python3 tests/render_video_job.py courses/eight-moves.json "$out/eight-moves.mp4"
+          offline python3 tests/check_eight_moves.py "$out/eight-moves.mp4"
+          echo "::endgroup::"
+
+          echo "::group::Three-minute offline render"
+          offline sh -eu -c '
             ffmpeg -v error -stream_loop -1 -i tests/fixtures/pulse.ogg -t 180 \
               -ac 1 -ar 16000 -c:a pcm_s16le /tmp/three-minutes.wav
             python3 -c "import json; c=json.load(open(\"courses/neon-round.json\")); c[\"course\"][\"music\"]=\"three-minutes.wav\"; print(json.dumps(c))" > /tmp/three-minutes.json
             python3 tests/render_video_job.py /tmp/three-minutes.json /tmp/three-minutes.mp4
-            cp /tmp/three-minutes.resources.json /out/
-          '
-      - uses: actions/upload-artifact@v4
+            cp /tmp/three-minutes.resources.json "$1/"
+          ' render "$out"
+          echo "::endgroup::"
+      - name: Upload video, editable course and verification files
+        id: upload
+        uses: actions/upload-artifact@v4
         with:
-          name: jabjam-follow-along-${{ github.run_id }}
+          name: ${{ env.ARTIFACT_NAME }}
           path: build/video/
           if-no-files-found: error
-          retention-days: 1
+          retention-days: 7
+      - name: Video download and verification summary
+        if: always()
+        env:
+          ARTIFACT_URL: ${{ steps.upload.outputs.artifact-url }}
+          RESULT: ${{ job.status }}
+        shell: python
+        run: |
+          import html
+          import json
+          import os
+          from pathlib import Path
+
+          env = os.environ
+          course = html.escape(" ".join(env["COURSE"].splitlines()))
+          with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
+              print(f"## 拳击跟练视频 · {env['RESULT']}\n\n课程路径\n\n<pre>{course}</pre>\n", file=summary)
+              if env["ARTIFACT_URL"]:
+                  print(f"[下载 {env['ARTIFACT_NAME']}]({env['ARTIFACT_URL']})（保留 7 天）\n", file=summary)
+                  print("播放 `jabjam.mp4`。修改 `jabjam-course.json` 可以调整每个动作。"
+                        "使用仓库音频的课程请将压缩包解到同一版仓库的 `build/video/`。\n", file=summary)
+                  print("已检查课程、成片音视频轨道与时长。\n", file=summary)
+                  if env["VERIFY_SAMPLES"] == "true":
+                      print("完整验收通过，包内附四拳和八动作样片、两张对照图及三分钟测试的资源报告。\n", file=summary)
+              else:
+                  print("成片包尚未上传。请展开本次运行中失败的步骤查看错误。\n", file=summary)
+              for stem, label in (("jabjam", "所选课程"), ("three-minutes", "三分钟测试")):
+                  path = Path(f"build/video/{stem}.resources.json")
+                  if path.is_file():
+                      report = json.loads(path.read_text())
+                      peak = report["container_peak_bytes"]
+                      memory = f"{peak / 1024**2:.1f} MiB" if peak is not None else "未测得"
+                      print(f"- {label}：成片 {report['duration_seconds']:.1f} 秒，"
+                            f"导出耗时 {report['elapsed_seconds']:.1f} 秒，容器内存峰值 {memory}。", file=summary)

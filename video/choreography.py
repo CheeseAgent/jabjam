@@ -119,9 +119,9 @@ def _combo_cues(template, start_time, start_hand, period, course):
             last = MOVEMENTS[built[-1]["action"]]
             gap = required_gap(last, MOVEMENTS[action], course)
             beat_offset += max(1, ceil((gap - 1e-9) / period))
-        elif len(kinds) <= 2:
-            # No extra delay on the first cue; the first two hits can be slower.
-            beat_offset = 0
+            # The editable course stores milliseconds. Check the rounded cue too.
+            if round(start_time + beat_offset * period, 3) - built[-1]["time"] + 1e-9 < gap:
+                beat_offset += 1
         built.append({"time": round(start_time + beat_offset * period, 3),
                       "action": action, "combo_name": label,
                       "combo_id": key, "combo_step": index + 1,

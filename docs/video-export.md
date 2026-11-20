@@ -4,6 +4,8 @@
 
 从 [自动编排示例](../courses/neon-round.json) 或 [手排八动作示例](../courses/eight-moves.json) 复制一份 JSON。时间以音乐起点为零，单位为秒。一份配置对应一首歌、一条连续时间轴和一个视频文件。
 
+也可以把自动课程转成手排课程，保留实际编排后的时间、动作、画面设置和生效的命令行覆盖值。用法见 [从自动谱开始改](../README.md#从自动谱开始改)。`--write-course` 用 ffprobe 读取原曲，自动编排或生成内置曲时会调用 Godot。之后可直接编辑输出的 JSON，再用相同的导出命令生成 MP4。
+
 | 字段 | 作用 |
 | --- | --- |
 | `version` | 当前填整数 1。 |
@@ -17,6 +19,7 @@
 | `picture.size`、`picture.fps` | 默认 `[1280,720]` 和 24 fps。也支持 960×540、640×360，以及 25 / 30 fps。 |
 | `picture.approach_seconds` | 提前多少秒让方块出现，可设 0.7–4 秒，默认 2。开头不足预告时长的动作会在第一帧已经进入轨道。 |
 | `picture.left_color`、`picture.right_color` | 两侧轨道、方块及碎片使用的颜色，格式为 `#RRGGBB`。选择相互区分且与深色场景有对比的颜色。 |
+| `picture.scene` | 默认 `"neon"` 使用动态场景。设为 `"classic"` 可用原来的静态背景，两种场景共用动作、时间和左右轨道配色。命令行的 `--scene` 或 Actions 的场景下拉框可以覆盖这项设置。 |
 
 GitHub 托管任务只能访问该次检出和构建时包含的素材。示例使用仓库原创音频。自有歌曲可在持有该文件的机器或私有仓库使用；公共仓库示例选用可公开分发的音频。Docker 构建上下文受根目录 `.dockerignore` 约束。
 
@@ -38,6 +41,8 @@ GitHub 托管任务只能访问该次检出和构建时包含的素材。示例�
 
 画面顶部会显示正在准备的组合与当前第几拳，导出的 `*.chart.json` 中每次动作额外带有 `combo_name`、`combo_id`、`combo_step`、`combo_total`、`combo_no` 以便检验重复练习。此模式仅用于自动视频谱，手排时间轴保持不变，`easy` 不会强制做复杂组合。
 
+`--write-course` 会把相同的组合提示保存在手排课程中。手改时可同时修改组合名、当前拳序和总拳数，也可以删除该动作的组合字段，只保留 `time` 和 `action`。时间已经包含自动谱采用的拍点偏移，重新导出手排课程时直接使用这些秒数。
+
 **限制：** 当前只是按估算的恒定 BPM 把组合放到完整拍子，没有确认真实音乐的第一小节强拍，也没有识别主歌、副歌。能量区间仍采用 V2 的四秒窗口；在真实歌曲中可能存在段落误判或逐渐失拍，需结合音频试听与谱面诊断继续改进。
 
 ## 难度和出拳间隔
@@ -56,6 +61,8 @@ Python 用 Pillow 逐帧绘制，FFmpeg 从管道读取 RGB 并混入原曲音�
 
 ## 资源与验收
 
+早期 24 秒素材的独立实验中，编排进程的峰值 RSS 约 60 MiB，单线程低延迟编码约 70 MiB，另一组编码参数约 448 MiB。现在每次工作流都用下面的容器限额跑实际成片，运行摘要提供当次测量。[早期实验记录](https://github.com/CheeseAgent/jabjam/pull/8)
+
 工作流使用独立的 `video-export` 镜像目标。镜像构建在 GitHub runner 上进行。每次导出使用新的离线容器，限制为 **2 CPU、300,000,000 字节内存、无额外 swap**，构建阶段不套用此限额。实际数字写在产物的 `*.resources.json` 中：导出耗时、成片时长和大小、导出完成时读取的 cgroup v2 内存峰值。该值包含容器内进程及计入其账下的缓存。三分钟测试的峰值还包括容器内的测试音频准备。
 
 - 默认自动课程验证音乐分析、动作编排与 720p 导出。额外使用三分钟测试曲验证较长时间轴。
@@ -64,17 +71,6 @@ Python 用 Pillow 逐帧绘制，FFmpeg 从管道读取 RGB 并混入原曲音�
 
 这些样例覆盖指定时长、帧率与素材。编解码器、声道数及源文件大小也会影响峰值，配置允许导入的最长文件仍需按实际素材测试。
 
+## 扩展动作
 
-## 接手代码时从哪里开始
-
-| 想改什么 | 文件与入口 |
-| --- | --- |
-| 动作 ID、中文名、左右侧、类型 | [movements.py](../video/movements.py) 的 `MOVEMENTS`。课程 JSON 引用这里的 ID；已有 ID 要继续能读。 |
-| 最短间隔、哪些拍点适合插入侧步 | [choreography.py](../video/choreography.py)。`required_gap` 同时服务手排和自动谱；`arrange` 接收带时间戳的音符，返回成片使用的动作。 |
-| 箭头、脚印长什么样 | [cue_art.py](../video/cue_art.py)。拳块正面从 `PUNCH_SHAPES` 取形状；脚印和落地波纹分别在 `foot_pad`、`step_landing`。 |
-| 轨道、透视、击碎反馈 | [arena.py](../video/arena.py) 的 `Arena.frame` 按时间和动作类型画一帧。 |
-| 运行整个流程 | [export.py](../video/export.py) 读课程、调用原有 Godot 分析、交给 `arrange`、逐帧编码。 |
-
-例如只想把「左摆拳」改个显示名字，在动作表里改 `label` 即可。添加一种全新动作时，先在动作表登记，再给它手排一个拍点、补图标和间隔测试；需要自动生成时才改 `arrange` 所调用的编排规则。
-
-在仓库根目录运行 `python3 tests/test_video_pacing.py` 检查规则。运行 `python3 video/export.py courses/eight-moves.json build/eight-moves.mp4`，再执行 `python3 tests/check_eight_moves.py build/eight-moves.mp4`，可从成片验证上勾拳和侧步并得到八动作对照图。
+在 [动作表](../video/movements.py) 注册 ID，用手排课程放一个拍点，再到 [cue_art.py](../video/cue_art.py) 添加箭头或脚印。需要自动生成时，可在 [choreography.py](../video/choreography.py) 增加编排规则或组合模板。按任务查找入口、运行回归测试和抽帧验收的命令见 [AGENTS.md](../AGENTS.md)。

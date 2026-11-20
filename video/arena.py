@@ -2,6 +2,7 @@
 from bisect import bisect_left, bisect_right
 from functools import lru_cache
 from math import cos, pi, sin
+from random import Random
 from PIL import Image, ImageColor, ImageDraw, ImageFont
 
 from movements import MOVEMENTS, LEFT
@@ -13,6 +14,7 @@ DUSK = (135, 158, 181)
 HORIZON = 210
 HIT_Y = 510
 SHATTER = 0.58
+PYLON_DEPTHS = (.14, .20, .29, .42, .61, .88, 1.27)
 
 
 def blend(a, b, p):
@@ -51,6 +53,7 @@ class Arena:
         self.duration = duration
         self.lead = picture.get("approach_seconds", 2)
         self.size = tuple(picture.get("size", [1280, 720]))
+        self.neon = picture.get("scene", "neon") == "neon"
         self.colors = [ImageColor.getrgb(picture.get("left_color", "#63edce")),
                        ImageColor.getrgb(picture.get("right_color", "#ff916d"))]
         self.halo = Image.new("L", (96, 96))
@@ -61,22 +64,96 @@ class Arena:
         self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
         self.base = self.background(title)
 
+    def skyline(self, im, d):
+        # All skyline lights and the graduated solar disc are painted once per course.
+        dusk = (87, 66, 104)
+        for y in range(77, HORIZON + 1):
+            d.line((0, y, 1280, y), fill=blend((17, 23, 46), dusk, ((y-77)/(HORIZON-77))**1.6))
+        rng = Random(41)
+        for _ in range(100):
+            x, y = rng.randrange(1280), rng.randrange(80, HORIZON-16)
+            d.point((x, y), fill=(89, 99, 132))
+        glow = self.halo.resize((290, 158))
+        im.paste((178, 123, 116), (495, 105, 785, 263), glow)
+        # Narrow bands break up the lower half of the disc at the horizon.
+        radius, center_y = 49, HORIZON - 28
+        for dy in range(-radius, HORIZON-center_y+1):
+            if dy > 0 and dy % 8 < 1 + dy//13:
+                continue
+            half = (radius**2 - dy**2)**.5
+            tint = blend((245, 201, 158), (205, 111, 134), (dy+radius)/(2*radius))
+            d.line((640-half, center_y+dy, 640+half, center_y+dy), fill=tint)
+        for base, facade, lights in [
+            (HORIZON-2, (61, 57, 84), (105, 91, 108)),
+            (HORIZON+2, (32, 40, 62), (82, 105, 121)),
+        ]:
+            x = -7
+            while x < 1280:
+                width = rng.randrange(9, 32)
+                height = rng.randrange(7, 30) + round(abs(x-640)*.025)
+                top = base-height
+                d.rectangle((x, top, x+width, base), fill=facade)
+                if rng.randrange(4) == 0:
+                    d.rectangle((x+3, top-4, x+width//2, top), fill=facade)
+                for row in range(top+4, base-2, 5):
+                    if rng.randrange(3) == 0:
+                        d.line((x+3, row, x+width//2, row), fill=lights)
+                x += width + rng.randrange(2, 7)
+
+    def pylons(self, d, sign, color):
+        # Repeat a bevelled steel section in perspective, from back to front.
+        for z in PYLON_DEPTHS:
+            def project(dx, dy):
+                return (640 + sign*dx*z, HORIZON + dy*z)
+
+            rim = blend((35, 42, 65), color, .20*z)
+            beam = [(765,-183), (598,-153), (522,-103), (522,63), (610,140),
+                    (654,149), (562,51), (562,-92), (611,-129), (765,-155)]
+            d.polygon([project(x, y) for x, y in beam], fill=(26, 35, 53))
+            d.line([project(x, y) for x, y in beam[:5]], fill=rim, width=max(1, round(3*z)))
+            d.line([project(736,-166), project(605,-141), project(551,-106)],
+                   fill=blend(INK, color, .46), width=max(1, round(5*z)))
+            d.line([project(540,26), project(540,57), project(598,111)],
+                   fill=blend(INK, color, .38), width=max(1, round(4*z)))
+
+    def runway_lights(self, d, t, index):
+        # Dashes advance outside the cue lanes. Only the rail on the struck side brightens.
+        hit_side, heat = 0, 0
+        if index:
+            age = t - self.times[index-1]
+            hit_side = MOVEMENTS[self.notes[index-1]["action"]].side
+            heat = max(0, 1-age/SHATTER)**2
+        for side, color in zip((-1, 1), self.colors):
+            accent = .48 * heat if side == hit_side else 0
+            for i in range(10):
+                phase = (i + t*1.8) % 10 / 10
+                depth = phase*phase
+                tail = max(0, phase-.034)**2
+                light = blend((47, 58, 81), color, .12 + (.30+accent)*phase)
+                for edge in (565, 900):
+                    d.line((640+side*edge*tail, HORIZON+422*tail,
+                            640+side*edge*depth, HORIZON+422*depth),
+                           fill=light, width=max(1, round(5*depth)))
+
     def background(self, title):
         im = Image.new("RGB", (1280, 720), INK)
         d = ImageDraw.Draw(im)
         for y in range(77, 632):
             factor = max(0, 1 - abs(y-HORIZON)/360)
             d.line((0, y, 1280, y), fill=blend((11, 20, 34), (34, 58, 79), factor))
+        if self.neon:
+            self.skyline(im, d)
         # Opposing banks of light and receding trusses frame the vanishing point.
         for sign, color in zip((-1, 1), self.colors):
-            for index in range(8):
-                z = .77 ** index
-                edge = 640 + sign * 750 * z
-                top = HORIZON - 156 * z
-                bottom = HORIZON + 190 * z
-                d.line((edge, top, edge, bottom), fill=(46, 70, 89), width=max(1, round(6*z)))
-                d.line((edge, top, edge - sign*150*z, top+30*z),
-                       fill=blend(INK, color, .46*z), width=max(1, round(4*z)))
+            if not self.neon:
+                for index in range(8):
+                    z = .77 ** index
+                    edge = 640 + sign * 750 * z
+                    top = HORIZON - 156 * z
+                    bottom = HORIZON + 190 * z
+                    d.line((edge, top, edge, bottom), fill=(46, 70, 89), width=max(1, round(6*z)))
+                    d.line((edge, top, edge - sign*150*z, top+30*z),
+                           fill=blend(INK, color, .46*z), width=max(1, round(4*z)))
             d.polygon([(640,HORIZON), (640+sign*505,632), (640+sign*147,632)],
                       fill=blend((21,36,53),color,.07))
             for at in (155, 485, 740, 1080, 1520):
@@ -86,6 +163,9 @@ class Arena:
             y=HORIZON + (i/11)**2.6 * 420
             d.line((0,y,1280,y),fill=(41,61,79),width=1)
         d.line((0,HORIZON,1280,HORIZON),fill=(83,109,125))
+        if self.neon:
+            for side, color in zip((-1, 1), self.colors):
+                self.pylons(d, side, color)
         d.line((0,HIT_Y,1280,HIT_Y),fill=(135,159,176),width=2)
         for side, color in zip((-1,1), self.colors):
             x = 640+side*255
@@ -191,6 +271,8 @@ class Arena:
         d=ImageDraw.Draw(im)
         index=bisect_right(self.times,t)
         end=bisect_right(self.times,t+self.lead)
+        if self.neon:
+            self.runway_lights(d, t, index)
         for j in range(end - 1, index - 1, -1):
             move = MOVEMENTS[self.notes[j]["action"]]
             color = self.colors[0 if move.side == LEFT else 1]

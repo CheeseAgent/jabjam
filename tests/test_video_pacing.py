@@ -1,11 +1,17 @@
 """Regression checks for authored and generated workout timelines."""
+import json
+import os
 from pathlib import Path
+import shutil
+import subprocess
 import sys
+import tempfile
 import unittest
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "video"))
-from export import config
-from choreography import arrange, pace_notes, MIN_GAP
+ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(ROOT / "video"))
+from export import config, prepare
+from choreography import MIN_GAP, arrange, pace_notes
 from movements import MOVEMENTS
 
 
@@ -189,14 +195,111 @@ class VideoPacing(unittest.TestCase):
         course, *_ = config(path)
         self.assertEqual(course["movement_set"], "padwork")
 
+    def test_saved_padwork_respects_recovery_after_millisecond_rounding(self):
+        bpm = 130
+        period = 60 / bpm
+        chart = {"bpm": bpm, "duration": 83, "sections": [{"intensity": .95}] * 21}
+        seed = [{"time": 3 + i * period, "action": "left_jab"} for i in range(90)]
+        course = dict(self.course, min_gap=period - .00002, movement_set="padwork")
+        notes = arrange(seed, course, True, chart)
+        self.assertTrue(notes)
+        self.assertEqual(notes, arrange(notes, course, False))
+
     def test_runtime_overrides_cannot_lower_the_floor(self):
-        path = Path(__file__).resolve().parents[1] / "courses/neon-round.json"
+        path = ROOT / "courses/neon-round.json"
         course, *_ = config(path, "Demo", "easy", .3)
         self.assertEqual((course["song_title"], course["min_gap"]), ("Demo", 1.1))
         course, *_ = config(path, None, "normal", 1.6)
         notes = [{"time": 3, "action": "left_jab"}, {"time": 4.5, "action": "right_jab"}]
         with self.assertRaisesRegex(ValueError, "1.6s"):
             pace_notes(notes, course, False)
+
+
+class CourseCLI(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.work = Path(temp.name)
+
+    def cli(self, *args, no_tools=False):
+        # -E -S skips site-packages and PYTHONPATH, even on a machine with Pillow installed.
+        env = dict(os.environ)
+        if no_tools:
+            env["PATH"] = ""
+        return subprocess.run([sys.executable, "-E", "-S", ROOT / "video/export.py", *args],
+                              cwd=self.work, env=env, capture_output=True, text=True, timeout=60)
+
+    def test_check_uses_only_python_and_reports_bad_spacing(self):
+        for name in ("eight-moves", "neon-round"):
+            result = self.cli(ROOT / f"courses/{name}.json", "--check", no_tools=True)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        course = {"version": 1, "course": {"music": "builtin:demo"},
+                  "actions": [{"time": 4, "action": "step_left"}, {"time": 5, "action": "step_right"}]}
+        source = self.work / "crowded.json"
+        source.write_text(json.dumps(course))
+        result = self.cli(source, "--check", no_tools=True)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("1.5", result.stderr)
+
+    def test_cli_requires_one_output_mode(self):
+        source = ROOT / "courses/four-punches.json"
+        for args in ((), ("output.mp4", "--check"), ("--check", "--write-course", "out.json"),
+                     ("output.mp4", "--write-course", "out.json")):
+            with self.subTest(args=args):
+                result = self.cli(source, *args, no_tools=True)
+                self.assertEqual(result.returncode, 2, result.stderr)
+        self.assertEqual(list(self.work.iterdir()), [])
+
+    @unittest.skipUnless(shutil.which("ffprobe"), "writing a course probes its audio with ffprobe")
+    def test_write_manual_course_relocates_music_and_preserves_edits(self):
+        source = ROOT / "courses/four-punches.json"
+        original = json.loads(source.read_text())
+        output = self.work / "drafts" / "round.json"
+        result = self.cli(source, "--write-course", output, "--song-title", "练习",
+                          "--difficulty", "easy", "--min-gap", "1.4")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        draft = json.loads(output.read_text())
+        course = draft["course"]
+        self.assertEqual(draft["actions"], original["actions"])
+        self.assertEqual(draft["picture"], original["picture"])
+        self.assertEqual((course["song_title"], course["difficulty"], course["min_gap"]), ("练习", "easy", 1.4))
+        self.assertFalse(Path(course["music"]).is_absolute())
+        self.assertEqual((output.parent / course["music"]).resolve(), (source.parent / original["course"]["music"]).resolve())
+        draft["actions"][0]["action"] = "left_uppercut"
+        output.write_text(json.dumps(draft))
+        edited = self.work / "edited.json"
+        result = self.cli(output, "--write-course", edited)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(json.loads(edited.read_text())["actions"], draft["actions"])
+
+        # A timeline past the end of the song must leave the previous export intact.
+        previous = edited.read_bytes()
+        draft["actions"][-1]["time"] = 599
+        output.write_text(json.dumps(draft))
+        result = self.cli(output, "--write-course", edited)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(edited.read_bytes(), previous)
+        result = self.cli(edited, "--write-course", edited)
+        self.assertNotEqual(result.returncode, 0)
+        self.assertEqual(edited.read_bytes(), previous)
+
+    @unittest.skipUnless(shutil.which("godot") and shutil.which("ffprobe"), "automatic charts need Godot and ffprobe")
+    def test_write_auto_captures_render_timeline(self):
+        source = ROOT / "courses/neon-round.json"
+        course, music, actions, _ = config(source, beat_offset_ms=95)
+        _, _, expected, _, _ = prepare(course, music, actions, self.work)
+        output = self.work / "round.json"
+        output.write_text("{}")
+        result = self.cli(source, "--write-course", output, "--beat-offset-ms=95", "--scene", "classic")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        draft = json.loads(output.read_text())
+        self.assertEqual(draft["actions"], expected)
+        self.assertTrue(any(n.get("combo_step") == 2 for n in expected))
+        self.assertEqual(draft["picture"]["scene"], "classic")
+        self.assertEqual(draft["course"]["beat_offset_ms"], 95)
+        self.assertEqual(draft["course"]["music"], "builtin:demo")
+        result = self.cli(output, "--check", no_tools=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
 
 
 if __name__ == "__main__":

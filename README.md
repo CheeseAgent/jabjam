@@ -1,6 +1,6 @@
 # JabJam · 音乐拳击跟练视频生成器
 
-选一首歌，生成一段可以在普通播放器打开的 MP4。跟练时面向屏幕，看方块沿左右轨道飞近，在它抵达击打线的音乐拍点空击。视频会在该拍点播放碎裂效果。
+选一首本地歌曲，生成可以在手机、电脑或电视上反复播放的 MP4。跟练时面向屏幕，看方块沿左右轨道飞近，在它抵达击打线的音乐拍点空击。可以直接用播放器暂停和回放。
 
 ## 看懂八种动作
 
@@ -15,11 +15,11 @@
 
 ## 在 GitHub Actions 生成视频
 
-1. 打开 **Actions → Render follow-along MP4**。工作流进入默认分支后，可用 **Run workflow** 选择分支并填入课程 JSON 路径、画面上要显示的歌名、难度和最短拳间隔。歌名留空时自动读取歌曲标题。开发中的合并请求也会自动运行示例课程。
-2. 默认课程 `courses/neon-round.json` 使用项目合成的 37 秒音乐，由现有 Godot 节拍分析与动作编排生成谱面。要精确指定每一拳的时间，参考 [八动作课程](courses/eight-moves.json)。
-3. 运行完成后，在该次 Actions 的 **Artifacts** 下载保留 **1 天** 的 `jabjam-follow-along-…`。解压后播放 `jabjam.mp4`。包内还有四拳和八动作验收短片、成片对照图及资源报告。
+1. 打开 [Render follow-along MP4](https://github.com/CheeseAgent/jabjam/actions/workflows/render-video.yml)，点 **Run workflow**，选 `main`。保留默认参数可以生成一段约 37 秒的原创音乐组合拳练习。
+2. 想用其他课程，填写相对仓库根目录的 JSON 路径。也可以在表单里覆盖歌名、难度、最短间隔、拍点偏移和场景。默认 `neon` 有落日天际线、沿轨移动的灯带和随击打亮起的侧灯；`classic` 使用静态背景。
+3. 运行成功后，在 **Summary** 点下载链接，解压播放 `jabjam.mp4`。压缩包保留 **7 天**，附上可编辑的 `jabjam-course.json` 和资源报告。自动课程还有 `jabjam.chart.json`，可对照实际拍点。
 
-构建依赖、排谱、渲染、编码和测试都可以在 GitHub 托管的 Linux runner 上完成。构建完成后，导出作业关闭容器网络。播放只需要成片，阿里云服务器无需参与。
+手动运行默认只导出并检查所选课程。勾选最后一项会附加四拳和八动作短片、抽帧对照图与三分钟压力测试。相关 PR 和合入 `main` 的改动会自动跑完整验收。构建后的排谱和编码在断网容器内完成。使用仓库中的音乐时，把下载的 JSON 放回同一版仓库的 `build/video/`，它就能按相对路径找到歌曲。
 
 ## 试验版音乐感知谱面（V2）
 
@@ -41,6 +41,18 @@ python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
 ```
 
 输出为横屏 H.264 / AAC MP4。音乐在本地分析；拳法、侧步、方块接近速度、配色、分辨率与帧率都由课程控制。课程字段、时间轴和测试口径见[视频导出指南](docs/video-export.md)。
+
+## 从自动谱开始改
+
+先让 JabJam 排一遍，把成片会用到的动作和时间写进普通课程 JSON。下面三条命令可在仓库根目录运行。第一条完成后，打开 `build/my-round.json`，在 `actions` 里换拳、删动作或挪动时间。
+
+```sh
+python3 video/export.py courses/neon-round.json --write-course build/my-round.json
+python3 video/export.py build/my-round.json --check
+python3 video/export.py build/my-round.json build/my-round.mp4
+```
+
+第一条会替换指定的目标 JSON，想保留手改版本时请另取文件名。自有歌曲仍从本地读取，生成的 JSON 会按新位置调整音乐路径。组合名和拳序也会写入谱面。第二条只需 Python 3.9+，会检查课程字段与手排间隔。实际音频时长在写谱或导出时核对。
 
 ## 写一份课程
 
@@ -71,21 +83,7 @@ python3 video/export.py courses/neon-round.json build/neon-round.mp4 \
 
 ## 接手代码时从哪里改
 
-| 要改的内容 | 入口 |
-| --- | --- |
-| 歌曲、时间点、课程动作顺序 | 照[八动作课程 JSON](courses/eight-moves.json)写一份课程即可。 |
-| 动作 ID、中文名、左右侧和类型 | 修改 [movements.py](video/movements.py) 的 `MOVEMENTS` 表。改显示名称只需改 `label`，已有课程仍按原 ID 读取。 |
-| 自动谱何时插入侧步、动作间隔 | 在 [choreography.py](video/choreography.py) 看 `arrange`（编排入口）、`mixed_round`（混合动作）及 `required_gap`（恢复间隔）。 |
-| 箭头、脚印和落地波纹 | 图形在 [cue_art.py](video/cue_art.py)；轨道位置、移动和击碎效果在 [arena.py](video/arena.py)。 |
-| 从配置到 MP4 的调用顺序 | 从 [export.py](video/export.py) 的 `export` 读起：读课程，准备音频和动作，绘制每一帧，交给 FFmpeg 编码。 |
-
-新增一种动作时，先登记 ID，用一份手排课程验证图标、方向和间隔，再按需加入自动编排。下面的命令可以检查规则、导出八动作样片，并从成片抽帧生成对照图：
-
-```sh
-python3 tests/test_video_pacing.py
-python3 video/export.py courses/eight-moves.json build/eight-moves.mp4
-python3 tests/check_eight_moves.py build/eight-moves.mp4
-```
+[仓库根目录的 AGENTS.md](AGENTS.md) 把改课程、调节奏、加组合和改画面分别对应到文件、函数和验收命令。可以先运行 `python3 video/export.py courses/eight-moves.json --check`，确认能读出 8 个手排动作。
 
 ## 早期交互原型
 

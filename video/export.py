@@ -1,89 +1,18 @@
-"""Export a local JabJam course to a standalone MP4. Linux, Python 3.9+."""
+"""Check a local JabJam course, write its editable timeline, or render an MP4. Linux, Python 3.9+."""
 import argparse
 import json
 import math
 import os
 from pathlib import Path
-import re
 import subprocess
 import sys
 import tempfile
 import time
 
-from arena import Arena
-from movements import MOVEMENTS
+from course import SCENES, check_course, config, number
 from choreography import MIN_GAP, arrange
 
 ROOT = Path(__file__).resolve().parents[1]
-
-
-def fields(obj, allowed, label):
-    if not isinstance(obj, dict) or set(obj) - set(allowed):
-        raise ValueError(f"{label}: expected an object with fields from {', '.join(allowed)}")
-    return obj
-
-
-def number(value, low, high, label):
-    if type(value) not in (int, float) or not low <= value <= high:
-        raise ValueError(f"{label} must be between {low} and {high}")
-    return value
-
-
-def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None):
-    data = fields(json.loads(path.read_text()), ("version", "course", "actions", "picture"), "config")
-    if type(data.get("version")) is not int or data["version"] != 1:
-        raise ValueError("Expected config version 1")
-    course = fields(data["course"], ("title", "song_title", "music", "difficulty", "bpm", "min_gap", "movement_set", "beat_offset_ms"), "course")
-    if course.get("movement_set", "classic") not in ("classic", "mixed", "padwork"):
-        raise ValueError("movement_set must be classic, mixed or padwork")
-    if song_title is not None:
-        course["song_title"] = song_title
-    if "song_title" in course:
-        title = course["song_title"]
-        if not isinstance(title, str) or not 1 <= len(title.strip()) <= 128:
-            raise ValueError("Use a song title of 1–128 characters")
-    music = course["music"]
-    if not isinstance(music, str) or not music:
-        raise ValueError("Expected a local music path or builtin:demo")
-    if music != "builtin:demo":
-        music = (path.parent / music).resolve()
-        if music.suffix.lower() not in (".mp3", ".wav", ".ogg") or not music.is_file():
-            raise ValueError("Expected a local MP3, WAV or Ogg Vorbis file")
-        if not 16 <= music.stat().st_size <= 64 * 1024 * 1024:
-            raise ValueError("Audio file must fit within 64 MiB")
-    difficulty = difficulty or course.get("difficulty", "normal")
-    if difficulty not in ("easy", "normal"):
-        raise ValueError("difficulty must be easy or normal")
-    course["difficulty"] = difficulty
-    requested_gap = course.get("min_gap", MIN_GAP[difficulty]) if min_gap is None else min_gap
-    course["min_gap"] = max(MIN_GAP[difficulty], number(requested_gap, 0, 600, "min_gap"))
-    if "bpm" in course:
-        number(course["bpm"], 60, 180, "bpm")
-    offset = course.get("beat_offset_ms", 0) if beat_offset_ms is None else beat_offset_ms
-    course["beat_offset_ms"] = number(offset, -250, 250, "beat_offset_ms")
-    actions = data.get("actions", "auto")
-    if actions != "auto":
-        if not isinstance(actions, list) or not 1 <= len(actions) <= 1000:
-            raise ValueError("actions must be auto or a nonempty list of up to 1000 notes")
-        last = -1
-        for note in actions:
-            fields(note, ("time", "action"), "note")
-            t = number(note["time"], 0, 600, "note time")
-            if note["action"] not in MOVEMENTS or t <= last:
-                raise ValueError("Expected known actions with strictly increasing times")
-            last = t
-    picture = fields(data.get("picture", {}), ("size", "fps", "approach_seconds", "left_color", "right_color"), "picture")
-    size = picture.get("size", [1280, 720])
-    if size not in ([640, 360], [960, 540], [1280, 720]) or any(type(n) is not int for n in size):
-        raise ValueError("Choose 640x360, 960x540 or 1280x720")
-    fps = picture.get("fps", 24)
-    if type(fps) is not int or fps not in (24, 25, 30):
-        raise ValueError("fps must be 24, 25 or 30")
-    number(picture.get("approach_seconds", 2), 0.7, 4, "approach_seconds")
-    for key in ("left_color", "right_color"):
-        if key in picture and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(picture[key])):
-            raise ValueError(f"{key} must be a #RRGGBB color")
-    return course, music, actions, picture
 
 
 def prepare(course, music, actions, tmp):
@@ -119,18 +48,24 @@ def prepare(course, music, actions, tmp):
         notes = actions
     if not notes:
         raise ValueError("No notes remain after beat offset correction")
-    if notes[-1]["time"] >= duration:
-        raise ValueError("Every action must fall before the end of the music")
+    last_time = notes[-1]["time"]
+    if last_time >= duration:
+        raise ValueError(f"Last action at {last_time:g}s must fall before the end of the music ({duration:g}s)")
     # Vorbis stores tags on the audio stream; MP3 usually stores them on the container.
     tags = {key.lower(): value for owner in (streams[0], metadata.get("format", {}))
             for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
     title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
-    return audio, duration, arrange(notes, course, actions == "auto", chart), title[:128], chart
+    timeline = arrange(notes, course, actions == "auto", chart)
+    if not timeline:
+        raise ValueError("No complete combination fits the song. Reduce course.min_gap or try movement_set classic")
+    return audio, duration, timeline, title[:128], chart
 
 
-def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None):
-    course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms)
+def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None):
+    from arena import Arena
+
+    course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms, scene)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -173,16 +108,49 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
           f"exported in {time.monotonic() - started:.2f}s")
 
 
+def write_course(path, output, **overrides):
+    """Save the same notes the renderer would use as an editable course."""
+    if output.suffix.lower() != ".json":
+        raise ValueError("Editable course output must end in .json")
+    course, music, actions, picture = config(path, **overrides)
+    if output.exists() and (output.samefile(path) or (music != "builtin:demo" and output.samefile(music))):
+        raise ValueError("Editable course output must be different from the source course and music")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    with tempfile.TemporaryDirectory(dir=output.parent) as folder:
+        tmp = Path(folder).resolve()
+        _, _, notes, title, _ = prepare(course, music, actions, tmp)
+        course["song_title"] = title
+        if music != "builtin:demo":
+            course["music"] = os.path.relpath(music, output.parent.resolve())
+        editable = {"version": 1, "course": course, "actions": notes, "picture": picture}
+        ready = tmp / "course.json"
+        ready.write_text(json.dumps(editable, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        os.replace(ready, output)
+    print(f"{output}: {len(notes)} editable actions")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("config", type=Path)
-    parser.add_argument("output", type=Path)
+    parser.add_argument("config", type=Path, help="Source course JSON")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("output", nargs="?", type=Path, help="MP4 to render")
+    mode.add_argument("--write-course", type=Path, metavar="EDITED.json",
+                      help="Write the final actions to a separate course JSON for editing")
+    mode.add_argument("--check", action="store_true", help="Check course settings and authored action spacing")
     parser.add_argument("--song-title", help="Song name shown in the header and MP4 metadata")
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
+    parser.add_argument("--scene", choices=SCENES, help="Override the course's arena background")
     args = parser.parse_args()
     try:
-        export(args.config, args.output, args.song_title, args.difficulty, args.min_gap, args.beat_offset_ms)
+        overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,
+                         beat_offset_ms=args.beat_offset_ms, scene=args.scene)
+        if args.check:
+            print(check_course(args.config, **overrides))
+        elif args.write_course is not None:
+            write_course(args.config, args.write_course, **overrides)
+        else:
+            export(args.config, args.output, **overrides)
     except (OSError, KeyError, ValueError, TypeError, RuntimeError, subprocess.SubprocessError) as exc:
         sys.exit(f"JabJam export failed: {exc}")
