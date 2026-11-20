@@ -1,8 +1,8 @@
 """Video-only timing and arrangement. All times are seconds on the source song."""
 from movements import MOVEMENTS
 
-MIN_GAP = {"easy": 1.1, "normal": 0.7}
-RECOVERY_GAP = {"easy": 1.35, "normal": 1.0}
+MIN_GAP = {"easy": 1.1, "normal": 0.45}
+RECOVERY_GAP = {"easy": 1.35, "normal": 0.90}
 STEP_GAP = {"easy": 1.75, "normal": 1.5}
 
 
