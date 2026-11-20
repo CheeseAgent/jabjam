@@ -52,9 +52,8 @@ class CoachContractTests(unittest.TestCase):
         original["picture"]["coach"] = {"enabled": True, "renderer": "vector"}
         with tempfile.TemporaryDirectory(dir=ROOT / "courses") as folder:
             path = Path(folder) / "test.json"
-            original["course"]["music"] = "../" + original["course"]["music"].removeprefix("../")
-            # The fixture uses an already-relative path from courses/.
-            original["course"]["music"] = "../tests/fixtures/pulse.ogg"
+            # Temporary courses live one directory below courses/.
+            original["course"]["music"] = "../../tests/fixtures/pulse.ogg"
             path.write_text(json.dumps(original), encoding="utf-8")
             settings = config(path)[3]["coach"]
             self.assertTrue(settings["enabled"])
