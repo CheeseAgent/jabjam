@@ -1,0 +1,6 @@
+{
+  "easy":   {"gap": 1.10, "recovery": 1.35, "step": 1.75},
+  "normal": {"gap": 0.45, "recovery": 0.90, "step": 1.50},
+  "hard":   {"gap": 0.38, "recovery": 0.70, "step": 1.40},
+  "expert": {"gap": 0.32, "recovery": 0.50, "step": 1.25}
+}

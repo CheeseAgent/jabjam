@@ -13,7 +13,7 @@ on:
       difficulty:
         description: 难度（course 沿用课程设置）
         type: choice
-        options: [course, easy, normal]
+        options: [course, easy, normal, hard, expert]
         default: course
       min_gap:
         description: 最短拳间隔（秒，留空使用课程设置）
@@ -25,6 +25,21 @@ on:
         description: 整首歌使用的场景（course 沿用课程设置）
         type: choice
         options: [course, neon, classic, undersea-office, jellyfish-radio, panda-hotpot, moon-carrots]
+        default: course
+      lyrics:
+        description: 歌词显示效果
+        type: choice
+        options: [course, 'off', fade, rise, pulse]
+        default: course
+      combo_side:
+        description: 连击位置（auto 放在教练对面）
+        type: choice
+        options: [course, auto, left, right, 'off']
+        default: course
+      combo_style:
+        description: 连击样式（简洁、街机、能量环）
+        type: choice
+        options: [course, minimal, arcade, ring]
         default: course
       verify_samples:
         description: 额外生成验收短片并跑三分钟压力测试
@@ -75,6 +90,9 @@ jobs:
       MIN_GAP: ${{ inputs.min_gap }}
       BEAT_OFFSET_MS: ${{ inputs.beat_offset_ms }}
       SCENE: ${{ inputs.scene || 'course' }}
+      LYRICS: ${{ inputs.lyrics || 'course' }}
+      COMBO_SIDE: ${{ inputs.combo_side || 'course' }}
+      COMBO_STYLE: ${{ inputs.combo_style || 'course' }}
       VERIFY_SAMPLES: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_samples }}
       ARTIFACT_NAME: jabjam-follow-along-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -97,6 +115,9 @@ jobs:
           if [[ -n "$MIN_GAP" ]]; then options+=("--min-gap=$MIN_GAP"); fi
           if [[ -n "$BEAT_OFFSET_MS" ]]; then options+=("--beat-offset-ms=$BEAT_OFFSET_MS"); fi
           if [[ "$SCENE" != course ]]; then options+=("--scene=$SCENE"); fi
+          if [[ "$LYRICS" != course ]]; then options+=("--lyrics=$LYRICS"); fi
+          if [[ "$COMBO_SIDE" != course ]]; then options+=("--combo-side=$COMBO_SIDE"); fi
+          if [[ "$COMBO_STYLE" != course ]]; then options+=("--combo-style=$COMBO_STYLE"); fi
 
           echo "::group::Course settings"
           offline python3 -S video/export.py "./$COURSE" --check "${options[@]}"
@@ -123,6 +144,11 @@ jobs:
             --check-cues --song-title "Pulse" --difficulty easy --min-gap 1.4 --scene classic
           offline python3 tests/render_video_job.py courses/eight-moves.json "$out/eight-moves.mp4"
           offline python3 tests/check_eight_moves.py "$out/eight-moves.mp4"
+          echo "::endgroup::"
+
+          echo "::group::Expert workout with visible lyrics and the side counter"
+          offline python3 tests/render_video_job.py courses/lyrics-and-combos.json "$out/workout-presets.mp4" \
+            --difficulty expert --lyrics pulse --combo-style ring
           echo "::endgroup::"
 
           echo "::group::Three-minute offline render"
@@ -158,6 +184,12 @@ jobs:
           course = html.escape(" ".join(env["COURSE"].splitlines()))
           with open(env["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as summary:
               print(f"## 拳击跟练视频 · {env['RESULT']}\n\n课程路径\n\n<pre>{course}</pre>\n", file=summary)
+              diagnostics = Path("build/video/jabjam.chart.json")
+              if diagnostics.is_file():
+                  chart = json.loads(diagnostics.read_text())
+                  count = len(chart.get("lyric_starts", []))
+                  print(f"难度 {chart['difficulty']} · 编舞采用 {count} 个歌词句首 · 排成 {chart['combo_count']} 组 · "
+                        f"歌词效果 {chart['lyric_style']} · 可显示 {chart['visible_lyric_lines']} 行", file=summary)
               if env["ARTIFACT_URL"]:
                   print(f"[下载 {env['ARTIFACT_NAME']}]({env['ARTIFACT_URL']})（保留 7 天）\n", file=summary)
                   print("播放 `jabjam.mp4`。修改 `jabjam-course.json` 可以调整每个动作。"

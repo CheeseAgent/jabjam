@@ -36,7 +36,7 @@ python3 video/export.py courses/eight-moves.json --check
 | 我想改 | 从这里看 | 怎么验 |
 | --- | --- | --- |
 | 歌曲、动作顺序、轨道颜色 | [八动作课程](courses/eight-moves.json)，[课程字段](docs/video-export.md) | 对改过的 JSON 运行 `--check`。 |
-| 给新歌找逐行歌词，让组合从句首起手 | [小奶茶的找词顺序和国内来源](docs/maintenance-playbook.md#给新歌找逐行歌词) | 核对录音版本，在标准难度自动喂靶课程的 `--check` 输出里确认歌词行数。 |
+| 给新歌找逐行歌词，让组合从句首起手 | [小奶茶的找词顺序和国内来源](docs/maintenance-playbook.md#给新歌找逐行歌词) | 核对录音版本，在 Normal、Hard 或 Expert 自动喂靶课程的 `--check` 输出里确认歌词行数。 |
 | 增减课程字段，改默认值或报错 | [course.py](video/course.py) 的 `config` | `python3 tests/test_video_pacing.py` 同时覆盖配置、间隔和命令行。 |
 | 调整恢复间隔、自动谱中的侧步 | [choreography.py](video/choreography.py) 的 `required_gap`、`arrange` | 跑上面的规则测试，再用 `--write-course` 查看实际动作和时间。 |
 | 增加教练组合 | [choreography.py](video/choreography.py) 的 `PADWORK_COMBOS`，每项给出 ID、显示名和出拳顺序 | 跑规则测试。用默认课程写出手排谱，查看 `combo_name` 和 `combo_step`。 |

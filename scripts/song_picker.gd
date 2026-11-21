@@ -52,8 +52,10 @@ func _ready() -> void:
 	var options := HBoxContainer.new()
 	options.add_theme_constant_override("separation", 16)
 	column.add_child(options)
-	difficulty.add_item("Easy / more recovery")
-	difficulty.add_item("Normal / jab + hook")
+	var levels := {"easy": "more recovery", "normal": "jab + hook", "hard": "longer runs", "expert": "sustained beats"}
+	for level in levels:
+		difficulty.add_item("%s / %s" % [str(level).capitalize(), levels[level]])
+		difficulty.set_item_metadata(difficulty.item_count - 1, level)
 	difficulty.select(1)
 	options.add_child(difficulty)
 	override_tempo.text = "Correct BPM manually"
@@ -122,7 +124,7 @@ func begin_import(path: String) -> void:
 	if job:
 		return
 	job = Job.new()
-	var error: Error = job.start(path, "easy" if difficulty.selected == 0 else "normal",
+	var error: Error = job.start(path, difficulty.get_selected_metadata(),
 		float(bpm.value) if override_tempo.button_pressed else 0.0, library.root_path)
 	if error != OK:
 		job = null

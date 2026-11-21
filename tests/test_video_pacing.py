@@ -123,7 +123,7 @@ class VideoPacing(unittest.TestCase):
         for offset in (-170, 0, 215):
             with self.subTest(offset=offset):
                 course = dict(self.course, min_gap=.45, movement_set="padwork", lyric_starts=starts,
-                              beat_offset_ms=offset)
+                              beat_offset_ms=offset, lyric_phrasing="single")
                 notes = calibrated_notes(arrange(seed, course, True, chart), offset, chart["duration"])
                 leads = [n for n in notes if n["combo_step"] == 1]
                 self.assertEqual([n["time"] for n in leads], [3.13, 8.36, 14.17, 16.26, 31.33])
@@ -148,6 +148,26 @@ class VideoPacing(unittest.TestCase):
         saved = calibrated_notes(notes, 249.5, 50)
         self.assertGreater(len(saved), 10)
         self.assertEqual(arrange(saved, course, False), saved)
+
+    def test_short_lines_can_share_one_complete_round(self):
+        beats = [i / 2 for i in range(90)]
+        chart = {"bpm": 120, "duration": 45, "beats": beats, "sections": [{"intensity": .95}] * 12}
+        seed = [{"time": 4, "action": "left_jab"}]
+        starts = [4.1, 6.1, 8.2, 16.3, 24.3, 32.3, 41.3]
+        for mode, longest in (("normal", 5), ("hard", 6), ("expert", 8)):
+            course = dict(difficulty=mode, min_gap=MIN_GAP[mode], movement_set="padwork", lyric_starts=starts)
+            for offset in (-170, 0, 123.5):
+                course["beat_offset_ms"] = offset
+                notes = calibrated_notes(arrange(seed, course, True, chart), offset, 45)
+                self.assertEqual(arrange(notes, course, False), notes)
+                leads = [n for n in notes if n["combo_step"] == 1]
+                self.assertEqual(max(n["combo_total"] for n in leads), longest)
+                self.assertTrue(all(n["time"] in starts for n in leads))
+                self.assertEqual(len(notes), sum(n["combo_total"] for n in leads))
+                self.assertEqual(leads[0]["time"], 4.1)
+                self.assertLessEqual(leads[1]["time"], 8.2)
+                single = calibrated_notes(arrange(seed, dict(course, lyric_phrasing="single"), True, chart), offset, 45)
+                self.assertGreater(leads[0]["combo_total"], single[0]["combo_total"])
 
     def test_calibration_drops_only_whole_boundary_combos(self):
         notes = [{"time": t, "combo_no": group} for t, group in
@@ -358,6 +378,30 @@ class CourseCLI(unittest.TestCase):
         run = self.cli(frozen, "--write-course", again, "--beat-offset-ms=-150")
         self.assertEqual(run.returncode, 0, run.stderr)
         self.assertEqual(json.loads(again.read_text())["actions"], draft["actions"])
+
+    def test_display_lyrics_are_independent_of_chart_and_freeze_with_the_course(self):
+        audio = self.work / "pulse.ogg"
+        shutil.copyfile(ROOT / "tests/fixtures/pulse.ogg", audio)
+        lrc = audio.with_suffix(".lrc")
+        lrc.write_text("[offset:+100]\n[00:04.20][00:12.25]向前一步\n[00:04.20]Translation\n"
+                       "[00:08.00]句 02\n[00:10.00][Instrumental]\n")
+        path = self.work / "manual.json"
+        path.write_text(json.dumps({"version": 1, "course": {"music": audio.name, "difficulty": "expert",
+                                    "lyric_starts": [6.2]}, "actions": [{"time": 4, "action": "left_jab"}]}))
+        self.assertNotIn("lyric_lines", config(path)[0])
+        course, _, _, _ = config(path, lyrics="rise")
+        self.assertEqual(course["lyric_starts"], [6.2])
+        self.assertEqual(course["lyric_lines"][0], {"time": 4.1, "text": "向前一步"})
+        self.assertIn("2 visible lyric lines", self.cli(path, "--check", "--lyrics=rise", no_tools=True).stdout)
+        frozen = self.work / "frozen.json"
+        result = self.cli(path, "--write-course", frozen, "--lyrics=rise", "--combo-side=right", "--combo-style=ring")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        lrc.unlink()
+        replay, _, actions, picture = config(frozen)
+        self.assertEqual(replay["lyric_lines"], course["lyric_lines"])
+        self.assertEqual(actions[0]["time"], 4)
+        self.assertEqual(picture, {"lyrics": "rise", "combo_side": "right", "combo_style": "ring"})
+        self.assertIn("no lyric text", self.cli(path, "--check", "--lyrics=pulse", no_tools=True).stdout)
 
     @unittest.skipUnless(shutil.which("ffprobe"), "writing a course probes its audio with ffprobe")
     def test_write_manual_course_relocates_music_and_preserves_edits(self):

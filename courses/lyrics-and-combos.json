@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "course": {
+    "song_title": "小奶茶 · 鼓点练习",
+    "music": "builtin:demo",
+    "difficulty": "hard",
+    "movement_set": "padwork",
+    "lyric_lines": [
+      {"time": 4.0, "text": "把星光装进拳套"},
+      {"time": 8.0, "text": "跟着鼓点　往前走"},
+      {"time": 12.0, "text": "月亮轻轻点头"},
+      {"time": 16.0, "text": "一拍一拍　敲亮夜空"},
+      {"time": 20.0, "text": "换一只手　跟上节奏"},
+      {"time": 24.0, "text": "把星光装进拳套"},
+      {"time": 28.0, "text": "跟着鼓点　往前走"},
+      {"time": 32.0, "text": "慢慢收势　抬头看星空"}
+    ]
+  },
+  "picture": {
+    "scene": "jellyfish-radio",
+    "coach": {"enabled": true, "renderer": "rig", "side": "right"},
+    "lyrics": "fade",
+    "combo_side": "auto",
+    "combo_style": "arcade"
+  }
+}
