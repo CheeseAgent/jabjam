@@ -16,7 +16,7 @@
 ## 在 GitHub Actions 生成视频
 
 1. 打开 [Render follow-along MP4](https://github.com/CheeseAgent/jabjam/actions/workflows/render-video.yml)，点 **Run workflow**，选择含所需课程的分支。保留默认参数可以生成一段约 37 秒的原创音乐组合拳练习。
-2. 想用其他课程，填写相对仓库根目录的 JSON 路径。也可以在表单里覆盖歌名、难度、最短间隔、拍点偏移和场景。想跟小奶茶练四景组合拳，课程填 `courses/milktea-tour.json`，场景选 `course`。下拉框也可以锁定任意一景。
+2. 想跟小奶茶练组合拳，课程填 `courses/milktea-tour.json`。在 **scene** 下拉框选整首歌的背景，选 `course` 会使用课程里指定的场景。表单也可调整歌名、难度、最短间隔和拍点偏移。
 3. 运行成功后，在 **Summary** 点下载链接，解压播放 `jabjam.mp4`。压缩包保留 **7 天**，附上可编辑的 `jabjam-course.json` 和资源报告。自动课程还有 `jabjam.chart.json`，可对照实际拍点。
 
 手动运行默认只导出并检查所选课程。勾选最后一项会附加四拳和八动作短片、抽帧对照图与三分钟压力测试。相关 PR 和合入 `main` 的改动会自动跑完整验收。构建后的排谱和编码在断网容器内完成。使用仓库中的音乐时，把下载的 JSON 放回同一版仓库的 `build/video/`，它就能按相对路径找到歌曲。
@@ -32,10 +32,10 @@
 | 熊猫火锅夜市 | 熊猫掌勺，鸳鸯锅和灯笼亮在左边 | `panda-hotpot` |
 | 月球萝卜基地 | 机器人把萝卜装车，远处停着萝卜火箭 | `moon-carrots` |
 
-`art-tour` 按上表顺序轮换，每次在下一组的第一拳换景。课程有四组以上时，按组数分成四段。没有组合标记的手排课程按动作分段。默认 `neon` 和 `classic` 仍可选。
+每首歌在渲染前选定一个场景，全程使用同一张背景。小奶茶示例课程默认用熊猫火锅夜市。把课程 JSON 的 `picture.scene` 设为表中任意选项，或在导出命令里用 `--scene` 指定本次场景。也可选 `neon` 或 `classic`。
 
 ```sh
-python3 video/export.py courses/milktea-tour.json build/milktea-tour.mp4
+python3 video/export.py courses/milktea-tour.json build/jellyfish-round.mp4 --scene jellyfish-radio
 ```
 
 ## 自动谱怎样踩拍

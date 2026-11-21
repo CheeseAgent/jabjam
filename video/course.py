@@ -8,7 +8,12 @@ from coach_timeline import validate_coach_config
 
 # Floor vanishing points on the 1280x720 canvas, with the artwork between the HUD bars.
 ART_HORIZONS = {"undersea-office": 338, "jellyfish-radio": 300, "panda-hotpot": 280, "moon-carrots": 331}
-SCENES = ("neon", "classic", *ART_HORIZONS, "art-tour")
+SCENES = ("neon", "classic", *ART_HORIZONS)
+
+
+def fixed_scene(value):
+    """Older course files and CLI invocations used art-tour. Keep its opening scene."""
+    return "undersea-office" if value == "art-tour" else value
 
 
 def fields(obj, allowed, label):
@@ -57,8 +62,8 @@ def read_actions(actions):
 
 def read_picture(picture, scene):
     fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach"), "picture")
-    if scene is not None:
-        picture["scene"] = scene
+    if scene is not None or "scene" in picture:
+        picture["scene"] = fixed_scene(scene if scene is not None else picture["scene"])
     if picture.get("scene", "neon") not in SCENES:
         raise ValueError("picture.scene must be one of " + ", ".join(SCENES))
     size = picture.get("size", [1280, 720])

@@ -10,7 +10,7 @@ from PIL import Image, ImageChops, ImageStat
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "video"))
 from arena import Arena, HIT_Y
-from course import ART_HORIZONS, config
+from course import ART_HORIZONS, SCENES, config, read_picture
 
 
 class ArenaScenes(unittest.TestCase):
@@ -33,15 +33,23 @@ class ArenaScenes(unittest.TestCase):
                 self.assertEqual(arena.base.getpixel((4, 15)), (12, 21, 35))
                 self.assertEqual(arena.base.getpixel((4, 700)), (12, 21, 35))
 
-    def test_tour_cuts_on_combo_starts_and_can_seek_back(self):
+    def test_selected_art_stays_fixed_across_combos_and_seeks(self):
         notes = [dict(note, combo_name="练习", combo_step=i % 2 + 1, combo_total=2) for i, note in enumerate(self.notes)]
-        arena = Arena("Test", {"scene": "art-tour"}, notes, 24)
-        expected = list(ART_HORIZONS)
-        for i in (2, 1, 3, 0):
-            arena.frame(notes[2*i]["time"])
-            self.assertEqual(arena.scene, expected[i])
-            arena.frame(notes[2*i+1]["time"])
-            self.assertEqual(arena.scene, expected[i])
+        box = (42, 175, 135, 240)
+        for scene in ART_HORIZONS:
+            with self.subTest(scene=scene):
+                arena = Arena("Test", {"scene": scene}, notes, 24)
+                expected = arena.base.crop(box).tobytes()
+                for at in (0, 8, 12.5, 18, 23.9, 4):
+                    self.assertEqual(arena.frame(at).crop(box).tobytes(), expected)
+
+    def test_older_tour_courses_resolve_to_a_single_overridable_scene(self):
+        self.assertNotIn("art-tour", SCENES)
+        self.assertEqual(read_picture({"scene": "art-tour"}, None)["scene"], "undersea-office")
+        self.assertEqual(read_picture({"scene": "art-tour"}, "moon-carrots")["scene"], "moon-carrots")
+        arena = Arena("Test", {"scene": "art-tour"}, self.notes, 24)
+        arena.frame(23.9)
+        self.assertEqual(arena.scene, "undersea-office")
 
     def test_fractional_hits_coincide_on_the_nearest_coach_and_burst_frame(self):
         notes = [dict(time=t, action="left_jab", combo_name="直直", combo_step=i+1, combo_total=2)

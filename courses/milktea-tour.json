@@ -1,14 +1,14 @@
 {
   "version": 1,
   "course": {
-    "song_title": "小奶茶 · 四景组合拳",
+    "song_title": "小奶茶 · 组合拳跟练",
     "music": "builtin:demo",
     "movement_set": "padwork",
     "difficulty": "normal"
   },
   "actions": "auto",
   "picture": {
-    "scene": "art-tour",
+    "scene": "panda-hotpot",
     "size": [1280, 720],
     "fps": 30,
     "coach": {"enabled": true, "renderer": "rig", "side": "right"}

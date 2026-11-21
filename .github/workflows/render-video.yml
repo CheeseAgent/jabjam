@@ -22,9 +22,9 @@ on:
         description: 自动谱拍点校准（毫秒，-250 到 +250；正数延后）
         type: string
       scene:
-        description: 场景（course 沿用课程，art-tour 随组合切换四景）
+        description: 整首歌使用的场景（course 沿用课程设置）
         type: choice
-        options: [course, neon, classic, undersea-office, jellyfish-radio, panda-hotpot, moon-carrots, art-tour]
+        options: [course, neon, classic, undersea-office, jellyfish-radio, panda-hotpot, moon-carrots]
         default: course
       verify_samples:
         description: 额外生成验收短片并跑三分钟压力测试

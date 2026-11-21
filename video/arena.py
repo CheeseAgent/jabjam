@@ -6,7 +6,7 @@ from pathlib import Path
 from random import Random
 from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
 
-from course import ART_HORIZONS
+from course import ART_HORIZONS, fixed_scene
 
 from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
@@ -60,13 +60,9 @@ class Arena:
         self.duration = duration
         self.lead = picture.get("approach_seconds", 2)
         self.size = tuple(picture.get("size", [1280, 720]))
-        self.title = title
-        selection = picture.get("scene", "neon")
-        self.stages = tuple(ART_HORIZONS) if selection == "art-tour" else (selection,)
-        # A cut belongs to the first strike of a new combo, even after a seek.
-        starts = [note["time"] for note in self.notes if note.get("combo_step", 1) == 1]
-        count = min(len(starts), len(self.stages))
-        self.cuts = [starts[i * len(starts) // count] for i in range(1, count)]
+        self.scene = fixed_scene(picture.get("scene", "neon"))
+        self.neon = self.scene == "neon"
+        self.horizon = ART_HORIZONS.get(self.scene, HORIZON)
         self.colors = [ImageColor.getrgb(picture.get("left_color", "#63edce")),
                        ImageColor.getrgb(picture.get("right_color", "#ff916d"))]
         self.halo = Image.new("L", (96, 96))
@@ -75,14 +71,8 @@ class Arena:
             glow.ellipse((48-radius, 48-radius, 48+radius, 48+radius),
                          fill=round(155*(1-radius/48)**1.4))
         self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
-        self._set_stage(self.stages[0])
+        self.base = self.background(title)
         self.coach = CoachLayer(self.notes, picture.get("coach", {}))
-
-    def _set_stage(self, scene):
-        self.scene = scene
-        self.neon = scene == "neon"
-        self.horizon = ART_HORIZONS.get(scene, HORIZON)
-        self.base = self.background(self.title)
 
     def skyline(self, im, d):
         # All skyline lights and the graduated solar disc are painted once per course.
@@ -306,9 +296,6 @@ class Arena:
             d.polygon(star, fill=hot)
 
     def frame(self,t):
-        stage = self.stages[bisect_right(self.cuts, t)]
-        if stage != self.scene:
-            self._set_stage(stage)
         im=self.base.copy()
         d=ImageDraw.Draw(im)
         index=bisect_right(self.times,t)

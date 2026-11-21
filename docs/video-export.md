@@ -19,7 +19,7 @@
 | `picture.size`、`picture.fps` | 默认 `[1280,720]` 和 24 fps。也支持 960×540、640×360，以及 25 / 30 fps。 |
 | `picture.approach_seconds` | 提前多少秒让方块出现，可设 0.7–4 秒，默认 2。开头不足预告时长的动作会在第一帧已经进入轨道。 |
 | `picture.left_color`、`picture.right_color` | 两侧轨道、方块及碎片使用的颜色，格式为 `#RRGGBB`。选择相互区分且与深色场景有对比的颜色。 |
-| `picture.scene` | 可选 `neon`（默认）、`classic`、`undersea-office`、`jellyfish-radio`、`panda-hotpot`、`moon-carrots` 或四景轮换 `art-tour`。命令行 `--scene` 和 Actions 场景下拉框可覆盖课程设置。 |
+| `picture.scene` | 在渲染前选定整首歌的背景。可选 `neon`（默认）、`classic`、`undersea-office`、`jellyfish-radio`、`panda-hotpot` 或 `moon-carrots`。命令行 `--scene` 或 Actions 场景下拉框可覆盖课程设置。旧课程的 `art-tour` 会使用它原来的开场背景海底摸鱼办公室。 |
 
 GitHub 托管任务只能访问该次检出和构建时包含的素材。示例使用仓库原创音频。自有歌曲可在持有该文件的机器或私有仓库使用；公共仓库示例选用可公开分发的音频。Docker 构建上下文受根目录 `.dockerignore` 约束。
 

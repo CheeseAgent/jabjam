@@ -14,7 +14,7 @@ from PIL import Image, ImageChops, ImageStat
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "video"))
-from course import SCENES
+from course import SCENES, fixed_scene
 
 
 def run(*args):
@@ -132,7 +132,7 @@ def main():
     p.add_argument("--difficulty", choices=("easy", "normal"))
     p.add_argument("--min-gap", type=float)
     p.add_argument("--beat-offset-ms", type=float)
-    p.add_argument("--scene", choices=SCENES)
+    p.add_argument("--scene", type=fixed_scene, choices=SCENES)
     args=p.parse_args()
     config=json.loads(args.config.read_text())
     started=time.monotonic()

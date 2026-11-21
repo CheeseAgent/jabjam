@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 
-from course import SCENES, check_course, config, number
+from course import SCENES, check_course, config, fixed_scene, number
 from choreography import MIN_GAP, arrange
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -147,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
-    parser.add_argument("--scene", choices=SCENES, help="Override the course's arena background")
+    parser.add_argument("--scene", type=fixed_scene, choices=SCENES, help="Choose one arena for the entire song")
     args = parser.parse_args()
     try:
         overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,
