@@ -1,16 +1,17 @@
 """First-person rhythm arena, drawn one frame at a time on a 1280x720 canvas."""
 from bisect import bisect_left, bisect_right
-from functools import lru_cache
 from math import ceil, cos, floor, pi, sin
 from pathlib import Path
 from random import Random
-from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
+from PIL import Image, ImageColor, ImageDraw, ImageOps
 
 from course import ART_HORIZONS, fixed_scene
 
 from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
 from coach_avatar import CoachLayer
+from lettering import font, text
+from workout_hud import WorkoutHud
 
 INK = (11, 21, 36)
 WHITE = (240, 248, 252)
@@ -25,33 +26,8 @@ def blend(a, b, p):
     return tuple(round(x + (y - x) * p) for x, y in zip(a, b))
 
 
-@lru_cache(maxsize=32)
-def font(size, bold):
-    name = "Bold" if bold else "Regular"
-    return ImageFont.truetype(f"/usr/share/fonts/opentype/noto/NotoSansCJK-{name}.ttc", size, index=2)
-
-
-@lru_cache(maxsize=320)
-def lettering(value, size, color, bold):
-    face = font(size, bold)
-    x0, y0, x1, y1 = face.getbbox(value)
-    mask = Image.new("L", (max(1, x1-x0), max(1, y1-y0)))
-    ImageDraw.Draw(mask).text((-x0, -y0), value, font=face, fill=255)
-    return Image.new("RGB", mask.size, color), mask
-
-
-def text(im, xy, value, size, color=WHITE, bold=False, align="left"):
-    label, mask = lettering(value, size, color, bold)
-    x, y = xy
-    if align == "center":
-        x -= label.width / 2
-    elif align == "right":
-        x -= label.width
-    im.paste(label, (round(x), round(y)), mask)
-
-
 class Arena:
-    def __init__(self, title, picture, notes, duration):
+    def __init__(self, title, picture, notes, duration, *, beats=(), bpm=120, lyric_lines=()):
         # Snap the presentation only. The chart and audio keep their source timestamps.
         fps = picture.get("fps", 24)
         last_frame = ceil(duration * fps) - 1
@@ -73,6 +49,7 @@ class Arena:
         self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
         self.base = self.background(title)
         self.coach = CoachLayer(self.notes, picture.get("coach", {}))
+        self.hud = WorkoutHud(picture, self.notes, self.times, beats, bpm, lyric_lines)
 
     def skyline(self, im, d):
         # All skyline lights and the graduated solar disc are painted once per course.
@@ -328,7 +305,8 @@ class Arena:
             text(im,(640,295),"跟随拍点 · 准备开始",36,WHITE,True,"center")
             text(im,(640,352),"直箭头打直拳   /   横弯打摆拳   /   上挑打上勾拳",20,DUSK,False,"center")
         cue = None
-        if index and t - self.times[index - 1] < .25:
+        just_hit = index > 0 and t - self.times[index - 1] < .25
+        if just_hit:
             cue = self.notes[index - 1]
             move = MOVEMENTS[cue["action"]]
             verb = "落步" if move.kind == "step" else "击打"
@@ -341,9 +319,10 @@ class Arena:
         text(im,(640,650),label,26,WHITE,True,"center")
         hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
         text(im,(640,692),hint,15,DUSK,False,"center")
-        if cue and cue.get("combo_name"):
+        if cue and cue.get("combo_name") and (just_hit or cue["combo_step"] > 1):
             caption = f"组合拳  /  {cue['combo_name']}     {cue['combo_step']}/{cue['combo_total']}"
             text(im,(640,107),caption,25,WHITE,True,"center")
+        self.hud.draw(im, t, index)
         elapsed=int(t)
         text(im,(42,104),f"{elapsed//60:02d}:{elapsed%60:02d}",25,WHITE,True)
         count_color = WHITE if self.scene in ART_HORIZONS else DUSK

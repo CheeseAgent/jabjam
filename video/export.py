@@ -9,8 +9,9 @@ import sys
 import tempfile
 import time
 
-from course import SCENES, check_course, config, fixed_scene, number
-from choreography import MIN_GAP, arrange
+from course import COUNTER_SIDES, COUNTER_STYLES, SCENES, check_course, config, fixed_scene, number
+from choreography import MIN_GAP, arrange, uses_padwork
+from lyrics import LYRIC_STYLES, visible_text
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +57,8 @@ def prepare(course, music, actions, tmp):
     else:
         notes = arrange(actions, course, False)
     if not notes:
+        if actions == "auto" and uses_padwork(course) and "lyric_starts" in course:
+            raise ValueError("No whole combination fits the timed lyric lines. Check line times, song version and min_gap")
         raise ValueError("No actions fit after spacing and beat offset. Reduce min_gap or try movement_set classic")
     last_time = notes[-1]["time"]
     if last_time >= duration:
@@ -68,10 +71,20 @@ def prepare(course, music, actions, tmp):
     return audio, duration, notes, title[:128], chart
 
 
-def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None):
+def display_beats(course, chart, duration):
+    if chart is None:
+        return course.get("display_beats", [])
+    offset = course["beat_offset_ms"] / 1000
+    shifted = (round(t + offset, 3) for t in chart["beats"])
+    return [t for t in shifted if 0 <= t < duration]
+
+
+def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
+           lyrics=None, combo_side=None, combo_style=None):
     from arena import Arena
 
-    course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms, scene)
+    course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms, scene,
+                                             lyrics, combo_side, combo_style)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -79,7 +92,8 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         tmp = Path(folder).resolve()
         audio, duration, notes, title, chart = prepare(course, music, actions, tmp)
-        arena = Arena(title, picture, notes, duration)
+        arena = Arena(title, picture, notes, duration, beats=display_beats(course, chart, duration),
+                      bpm=course.get("bpm", 120), lyric_lines=course.get("lyric_lines", ()))
         size = picture.get("size", [1280, 720])
         fps = picture.get("fps", 24)
         temp_mp4 = tmp / "render.mp4"
@@ -101,10 +115,16 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
                 raise
         os.replace(temp_mp4, output)
     if chart is not None:
-        diagnostics = {"algorithm": chart.get("version"), "bpm": chart.get("bpm"),
+        diagnostics = {"algorithm": chart.get("version"), "bpm": chart.get("bpm"), "difficulty": course["difficulty"],
                        "tempo_confidence": chart.get("confidence"),
                        "beat_offset_ms": course["beat_offset_ms"],
                        "source_beats": chart["beats"], "sections": chart.get("sections", []), "notes": notes}
+        if uses_padwork(course) and "lyric_starts" in course:
+            diagnostics["lyric_starts"] = course["lyric_starts"]
+        diagnostics["combo_count"] = sum(note.get("combo_step") == 1 for note in notes)
+        diagnostics["lyric_style"] = picture.get("lyrics", "off")
+        diagnostics["visible_lyric_lines"] = (sum(bool(visible_text(row["text"])) for row in course.get("lyric_lines", ()))
+                                              if diagnostics["lyric_style"] != "off" else 0)
         output.with_suffix(".chart.json").write_text(
             json.dumps(diagnostics, ensure_ascii=False, indent=2) + "\n")
     shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)
@@ -124,7 +144,9 @@ def write_course(path, output, **overrides):
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         tmp = Path(folder).resolve()
-        _, _, notes, title, _ = prepare(course, music, actions, tmp)
+        _, duration, notes, title, chart = prepare(course, music, actions, tmp)
+        if chart is not None:
+            course["display_beats"] = display_beats(course, chart, duration)
         course["song_title"] = title
         if music != "builtin:demo":
             course["music"] = os.path.relpath(music, output.parent.resolve())
@@ -148,10 +170,14 @@ if __name__ == "__main__":
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
     parser.add_argument("--scene", type=fixed_scene, choices=SCENES, help="Choose one arena for the entire song")
+    parser.add_argument("--lyrics", choices=LYRIC_STYLES, help="On-screen timed lyrics, off by default")
+    parser.add_argument("--combo-side", choices=COUNTER_SIDES, help="Counter position; auto is opposite the coach")
+    parser.add_argument("--combo-style", choices=COUNTER_STYLES, help="Visual style of the on-screen streak")
     args = parser.parse_args()
     try:
         overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,
-                         beat_offset_ms=args.beat_offset_ms, scene=args.scene)
+                         beat_offset_ms=args.beat_offset_ms, scene=args.scene, lyrics=args.lyrics,
+                         combo_side=args.combo_side, combo_style=args.combo_style)
         if args.check:
             print(check_course(args.config, **overrides))
         elif args.write_course is not None:

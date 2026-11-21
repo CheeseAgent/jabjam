@@ -5,6 +5,7 @@ const STEP := 0.01
 const SECTION_FRAMES := 400  # Four seconds at the analysis hop.
 const SAMPLE_RATE := 8000.0
 const ACTIONS := ["left_jab", "right_jab", "left_hook", "right_hook"]
+static var pacing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://video/difficulties.json"))
 
 static func analyze(stream: AudioStream, progress: Callable = Callable()) -> Dictionary:
 	var duration := stream.get_length()
@@ -151,14 +152,15 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 		difficulty: String = "normal", bpm_override: float = 0.0) -> Dictionary:
 	if analysis.has("error"):
 		return analysis
-	if difficulty not in ["easy", "normal"] or (bpm_override != 0.0 and (bpm_override < 60 or bpm_override > 180)):
-		return {"error": "Choose Easy / Normal and a BPM between 60 and 180."}
+	if not pacing.has(difficulty) or (bpm_override != 0.0 and (bpm_override < 60 or bpm_override > 180)):
+		return {"error": "Choose Easy, Normal, Hard or Expert and a BPM between 60 and 180."}
 	var bpm: float = bpm_override if bpm_override > 0 else analysis.estimated_bpm
 	var period := 60.0 / bpm
 	var energy: PackedFloat32Array = analysis.energy
 	var novelty: PackedFloat32Array = analysis.novelty
 	var beats := _beat_grid(novelty, period, duration)
-	var minimum_gap := 1.1 if difficulty == "easy" else 0.45
+	var profile: Dictionary = pacing[difficulty]
+	var minimum_gap := float(profile.gap)
 	var notes: Array[Dictionary] = []
 	var sections: Array[Dictionary] = []
 	# Describe the dynamic envelope: a four-second section is NOT a verse/chorus classifier.
@@ -188,6 +190,13 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 		var active := false
 		if difficulty == "easy":
 			active = beat_in_phrase in [0, 4] if level < 0.65 else beat_in_phrase in [0, 2, 4, 6]
+		elif difficulty in ["hard", "expert"]:
+			if level >= 0.68:
+				active = difficulty == "expert" or beat_in_phrase != 7
+			elif level >= 0.35:
+				active = beat_in_phrase != 7 if difficulty == "expert" else beat_in_phrase in [0, 1, 2, 4, 5, 6]
+			else:
+				active = beat_in_phrase in [0, 2, 4, 6]
 		elif level >= 0.68:
 			# Two short three-punch runs per 8 beats, separated by deliberate rests.
 			active = beat_in_phrase in [0, 1, 2, 4, 5, 6]
@@ -208,13 +217,13 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 			var previous: Dictionary = notes.back()
 			var recovery := minimum_gap
 			if str(previous.action).ends_with("hook"):
-				recovery = maxf(recovery, 0.90)
+				recovery = maxf(recovery, float(profile.recovery))
 			if time - float(previous.time) < recovery - 0.001:
 				continue
 		# Phrase-relative hooks rather than every N accepted notes. Hand alternation
 		# is maintained across rests; an eight-beat burst has a natural reset.
 		var hand := notes.size() % 2
-		var hook := difficulty == "normal" and level >= 0.68 and beat_in_phrase in [2, 6]
+		var hook := difficulty != "easy" and level >= 0.68 and beat_in_phrase in [2, 6]
 		var action: String = ACTIONS[hand + (2 if hook else 0)]
 		notes.append({"time": snappedf(time, 0.001), "action": action})
 	if notes.size() < 4:
@@ -228,7 +237,7 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 	if chart.get("version") != VERSION or chart.get("song_id") != song_id:
 		return false
-	if chart.get("notes") is not Array or chart.notes.size() < 4 or chart.notes.size() > 1000:
+	if chart.get("notes") is not Array or chart.notes.size() < 4:
 		return false
 	if typeof(chart.get("duration")) not in [TYPE_INT, TYPE_FLOAT] or typeof(chart.get("bpm")) not in [TYPE_INT, TYPE_FLOAT]:
 		return false
@@ -236,7 +245,10 @@ static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 		return false
 	if not is_finite(float(chart.get("bpm", -1))) or float(chart.get("bpm", -1)) < 60 or float(chart.get("bpm", -1)) > 180:
 		return false
-	if chart.get("difficulty") not in ["easy", "normal"]:
+	if not pacing.has(chart.get("difficulty")):
+		return false
+	var profile: Dictionary = pacing[chart.difficulty]
+	if chart.notes.size() > ceili(duration / float(profile.gap)) + 1:
 		return false
 	if chart.get("beats") is not Array or chart.beats.is_empty():
 		return false
@@ -250,13 +262,15 @@ static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 			return false
 		last_beat = beat
 	var previous := -10.0
+	var recovery := float(profile.gap)
 	for note in chart.notes:
 		if note is not Dictionary or note.get("action") not in ACTIONS:
 			return false
 		if typeof(note.get("time")) not in [TYPE_INT, TYPE_FLOAT]:
 			return false
 		var time := float(note.get("time", -1))
-		if not is_finite(time) or time < 3.0 or time > duration - 0.4 or time - previous < 0.43:
+		if not is_finite(time) or time < 3.0 or time > duration - 0.4 or time - previous < recovery - 0.00101:
 			return false
+		recovery = float(profile.recovery) if str(note.action).ends_with("hook") else float(profile.gap)
 		previous = time
 	return true

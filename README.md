@@ -42,9 +42,27 @@ python3 video/export.py courses/milktea-tour.json build/jellyfish-round.mp4 --sc
 
 自动模式从音频的低频和全频起音估算速度，再根据前后几拍的共同重音微调每个拍点。热身、组合拳和侧步共用这条时间轴。音乐的四秒能量窗口决定何处加密和留白。
 
-导出生成的 `.chart.json` 记录原曲拍点 `source_beats`、最终动作 `notes`、BPM 和置信度。`beat_offset_ms` 可将全套动作提前或延后最多 250 毫秒，仅在自动编排完成后应用一次。视频里拳套到位、方块碎裂和拳序显示在离动作最近的同一帧。
+导出生成的 `.chart.json` 记录原曲拍点 `source_beats`、最终动作 `notes`、BPM 和置信度。`beat_offset_ms` 可将按拍点安排的动作提前或延后最多 250 毫秒。视频里拳套到位、方块碎裂和拳序显示在离动作最近的同一帧。
+
+## 难度、歌词与连击显示
+
+Actions、课程 JSON 和命令行均可选择 Easy、Normal、Hard、Expert。Hard 的强段练六拳，Expert 的强段可达八拳。喂靶模式在换组前两拍报出左右手和下一套组合。短歌词可以两句共用一组，首拳踩句首，其余拳跟鼓点。
+
+| 渲染选项 | 预设 |
+| --- | --- |
+| 歌词 `--lyrics` | `off` 关闭（默认），`fade` 淡入淡出，`rise` 上浮入场，`pulse` 随拍脉冲 |
+| 连击 `--combo-style` | `minimal` 简洁计数，`arcade` 街机弹字（默认），`ring` 能量环 |
+| 位置 `--combo-side` | `auto` 放在教练对面（默认），也可选 `left`、`right` 或 `off` |
+
+用带原创示范文字的课程就能直接比较效果。
+
+```sh
+python3 video/export.py courses/lyrics-and-combos.json build/expert-ring.mp4 --difficulty expert --lyrics pulse --combo-style ring
+```
 
 ## 固定组合拳练习（padwork）
+
+想让小奶茶跟着歌词起手，把逐行带时间的 `song.lrc` 放在 `song.mp3` 旁边，使用 Normal、Hard 或 Expert 的自动喂靶谱。歌手提前半拍开口，第一拳就跟着提前，第二拳起继续踩鼓点。相邻短句可以共用一组，收拳后在下一处合适的句首起手。也可以直接在课程里填写句首秒数。[歌词时间和示例](docs/video-export.md#按歌词起拳)
 
 当音乐强度上升，拳组会从双拳热身过渡到常规三、四拳组合，再到五拳组合；每个级别都有多个经典套路，镜像重复练习两次后轮换。这是固定的训练乐句模板，不是每个拳点随机选动作，也不是已经实现真实歌曲的主副歌识别。视频会给出当前组合与第几拳的提示；Easy 自动练习不启用长组合。
 
@@ -73,7 +91,7 @@ python3 video/export.py build/my-round.json build/my-round.mp4
 
 ## 写一份课程
 
-**自动编排**时，把 `actions` 设为 `"auto"`。新增 `"movement_set": "padwork"`（与 `"difficulty": "normal"` 搭配）：教练从经典组合库中轮换 **直直摆、直直勾、直摆直、直直摆直、直直摆勾直、直勾直摆直** 等十余套拳组。每个套路先左起手、再右起手镜像重复两次练熟，才换下一套；音乐强度控制难度分组，组合之间留恢复拍。画面会显示组合名和当前拳序。默认 [neon-round.json](courses/neon-round.json) 已切换为此模式；旧的 `classic`、`mixed` 均保留。详情见 [视频导出指南](docs/video-export.md)。
+**自动编排**时，把 `actions` 设为 `"auto"`。新增 `"movement_set": "padwork"`（搭配 Normal、Hard 或 Expert）：教练从经典组合库中轮换 **直直摆、直直勾、直摆直、直直摆直、直直摆勾直、直勾直摆直** 等十余套拳组。每个套路先左起手、再右起手镜像重复两次练熟，才换下一套；音乐强度控制难度分组，组合之间留恢复拍。画面会显示组合名和当前拳序。默认 [neon-round.json](courses/neon-round.json) 已切换为此模式；旧的 `classic`、`mixed` 均保留。详情见 [视频导出指南](docs/video-export.md)。
 
 **手排**时，在 `actions` 数组里写清每个动作及其相对音乐开头的秒数。下面是一份可直接导出的课程，用内置音乐先练左摆拳和右上勾拳，再向左侧步、向右回位：
 
@@ -92,11 +110,11 @@ python3 video/export.py build/my-round.json build/my-round.mp4
 
 换歌时，把 `course.music` 改为相对这份 JSON 的 MP3、WAV 或 Ogg Vorbis 文件路径。想放慢节奏，可设置 `course.min_gap` 或在调用时传 `--min-gap`（秒）。导出器取用户设置和下表规则中的较大值。手排动作过密时，错误信息会指出要调整的两个时刻。
 
-| 相邻动作的最短间隔 | 入门 `easy` | 标准 `normal` |
-| --- | ---: | ---: |
-| 一般出拳 | 1.10 秒 | 0.45 秒 |
-| 摆拳或上勾拳之后，或连续使用同一只手 | 1.35 秒 | 0.90 秒 |
-| 侧步之前和之后 | 1.75 秒 | 1.50 秒 |
+| 相邻动作的最短间隔 | Easy | Normal | Hard | Expert |
+| --- | ---: | ---: | ---: | ---: |
+| 一般出拳 | 1.10 秒 | 0.45 秒 | 0.38 秒 | 0.32 秒 |
+| 摆拳或上勾拳之后，或连续使用同一只手 | 1.35 秒 | 0.90 秒 | 0.70 秒 | 0.50 秒 |
+| 侧步之前和之后 | 1.75 秒 | 1.50 秒 | 1.40 秒 | 1.25 秒 |
 
 ## 接手代码时从哪里改
 

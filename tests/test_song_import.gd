@@ -76,6 +76,11 @@ static func run(tree: SceneTree, check: Callable) -> void:
 	check.call(chart == Generator.generate(analysis, id, 24.0), "Identical audio and settings reproduce the chart")
 	var easy := Generator.generate(analysis, id, 24.0, "easy")
 	check.call(easy.id != chart.id and easy.notes.size() <= chart.notes.size(), "Easy has its own identity and no greater density")
+	var hard := Generator.generate(analysis, id, 24.0, "hard")
+	var expert := Generator.generate(analysis, id, 24.0, "expert")
+	check.call(Generator.valid(hard, id, 24.0) and Generator.valid(expert, id, 24.0), "Both advanced charts validate on reload")
+	check.call(hard.id != expert.id and hard.id != chart.id and expert.id != chart.id, "Each difficulty has its own cache key")
+	check.call(hard.notes.size() >= chart.notes.size() and expert.notes.size() > hard.notes.size(), "Advanced tiers increase density in the pulse fixture")
 	var corrected := Generator.generate(analysis, id, 24.0, "normal", 100.0)
 	check.call(corrected.id != chart.id and corrected.bpm == 100, "Manual BPM changes both grid and chart identity")
 	var safe := true

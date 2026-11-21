@@ -1,14 +1,18 @@
 """Read and check version 1 course files using only the Python standard library."""
 import json
 import re
+from math import ceil
 
-from choreography import MIN_GAP, arrange
+from choreography import MIN_GAP, arrange, uses_padwork
 from movements import MOVEMENTS
 from coach_timeline import validate_coach_config
+from lyrics import LYRIC_STYLES, read_lrc_lines, visible_text
 
 # Floor vanishing points on the 1280x720 canvas, with the artwork between the HUD bars.
 ART_HORIZONS = {"undersea-office": 338, "jellyfish-radio": 300, "panda-hotpot": 280, "moon-carrots": 331}
 SCENES = ("neon", "classic", *ART_HORIZONS)
+COUNTER_SIDES = ("auto", "left", "right", "off")
+COUNTER_STYLES = ("minimal", "arcade", "ring")
 
 
 def fixed_scene(value):
@@ -34,8 +38,9 @@ def number(value, low, high, label):
 def read_actions(actions):
     if actions == "auto":
         return actions
-    if not isinstance(actions, list) or not 1 <= len(actions) <= 1000:
-        raise ValueError('actions must be "auto" or a list of 1–1000 notes')
+    maximum = ceil(600 / min(MIN_GAP.values())) + 1
+    if not isinstance(actions, list) or not 1 <= len(actions) <= maximum:
+        raise ValueError(f'actions must be "auto" or a list of 1–{maximum} notes')
     last = -1
     for index, note in enumerate(actions):
         label = f"actions[{index}]"
@@ -60,8 +65,15 @@ def read_actions(actions):
     return actions
 
 
-def read_picture(picture, scene):
-    fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach"), "picture")
+def read_picture(picture, scene, lyrics=None, combo_side=None, combo_style=None):
+    fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach",
+                     "lyrics", "combo_side", "combo_style"), "picture")
+    for field, override, choices in (("lyrics", lyrics, LYRIC_STYLES), ("combo_side", combo_side, COUNTER_SIDES),
+                                     ("combo_style", combo_style, COUNTER_STYLES)):
+        if override is not None:
+            picture[field] = override
+        if field in picture and picture[field] not in choices:
+            raise ValueError(f"picture.{field} must be one of " + ", ".join(choices))
     if scene is not None or "scene" in picture:
         picture["scene"] = fixed_scene(scene if scene is not None else picture["scene"])
     if picture.get("scene", "neon") not in SCENES:
@@ -81,13 +93,54 @@ def read_picture(picture, scene):
     return picture
 
 
-def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None):
+def ordered_times(values, field):
+    if not isinstance(values, list) or not values:
+        raise ValueError(f"{field} must be a nonempty list of times in seconds")
+    times = [round(number(t, 0, 600, field), 3) for t in values]
+    if any(a >= b for a, b in zip(times, times[1:])):
+        raise ValueError(f"{field} must increase at millisecond precision")
+    return times
+
+
+def load_lyrics(course, music, actions, show):
+    auto = actions == "auto" and uses_padwork(course)
+    need_starts = auto and "lyric_starts" not in course
+    lines = course.get("lyric_lines")
+    if "lyric_lines" in course:
+        if not isinstance(lines, list):
+            raise ValueError("course.lyric_lines must be a list of timed text rows")
+        for row in lines:
+            fields(row, ("time", "text"), "course.lyric_lines")
+            if not isinstance(row.get("text"), str):
+                raise ValueError("course.lyric_lines needs a string for each text")
+        times = ordered_times([row.get("time") for row in lines], "course.lyric_lines")
+        lines = [{"time": t, "text": row["text"].strip()} for row, t in zip(lines, times)]
+        course["lyric_lines"] = lines
+    elif (need_starts or show) and music != "builtin:demo" and music.with_suffix(".lrc").is_file():
+        lines = read_lrc_lines(music.with_suffix(".lrc"))
+        if show:
+            course["lyric_lines"] = lines
+    if need_starts and lines:
+        starts = [row["time"] for row in lines if row["text"]]
+        if starts:
+            course["lyric_starts"] = starts
+    if "lyric_starts" in course:
+        course["lyric_starts"] = ordered_times(course["lyric_starts"], "course.lyric_starts")
+
+
+def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
+           lyrics=None, combo_side=None, combo_style=None):
     """Return effective course settings, resolved music source, actions, and picture."""
     data = fields(json.loads(path.read_text(encoding="utf-8")), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("version must be the integer 1")
     course = fields(data.get("course"), ("title", "song_title", "music", "difficulty", "bpm", "min_gap",
-                                         "movement_set", "beat_offset_ms"), "course")
+                                         "movement_set", "beat_offset_ms", "lyric_starts", "lyric_lines",
+                                         "lyric_phrasing", "display_beats"), "course")
+    if course.get("lyric_phrasing", "paired") not in ("single", "paired"):
+        raise ValueError("course.lyric_phrasing must be single or paired")
+    if "display_beats" in course:
+        course["display_beats"] = ordered_times(course["display_beats"], "course.display_beats")
     if course.get("movement_set", "classic") not in ("classic", "mixed", "padwork"):
         raise ValueError("course.movement_set must be classic, mixed or padwork")
     if song_title is not None:
@@ -106,8 +159,8 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
         if not 16 <= music.stat().st_size <= 64 * 1024 * 1024:
             raise ValueError(f"course.music must be between 16 bytes and 64 MiB: {music}")
     difficulty = difficulty or course.get("difficulty", "normal")
-    if difficulty not in ("easy", "normal"):
-        raise ValueError("course.difficulty must be easy or normal")
+    if not isinstance(difficulty, str) or difficulty not in MIN_GAP:
+        raise ValueError("course.difficulty must be one of " + ", ".join(MIN_GAP))
     course["difficulty"] = difficulty
     requested_gap = course.get("min_gap", MIN_GAP[difficulty]) if min_gap is None else min_gap
     course["min_gap"] = max(MIN_GAP[difficulty], number(requested_gap, 0, 600, "course.min_gap"))
@@ -115,14 +168,22 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
         number(course["bpm"], 60, 180, "course.bpm")
     offset = course.get("beat_offset_ms", 0) if beat_offset_ms is None else beat_offset_ms
     course["beat_offset_ms"] = number(offset, -250, 250, "course.beat_offset_ms")
-    return course, music, read_actions(data.get("actions", "auto")), read_picture(data.get("picture", {}), scene)
+    actions = read_actions(data.get("actions", "auto"))
+    picture = read_picture(data.get("picture", {}), scene, lyrics, combo_side, combo_style)
+    load_lyrics(course, music, actions, picture.get("lyrics", "off") != "off")
+    return course, music, actions, picture
 
 
 def check_course(path, **overrides):
     """Check the config and authored spacing without analyzing audio or rendering frames."""
-    course, _, actions, _ = config(path, **overrides)
+    course, _, actions, picture = config(path, **overrides)
     settings = f"{course['difficulty']}, min_gap {course['min_gap']:g}s"
+    if picture.get("lyrics", "off") != "off":
+        count = sum(bool(visible_text(row["text"])) for row in course.get("lyric_lines", ()))
+        settings += f", {count} visible lyric lines" if count else ", no lyric text to display"
     if actions == "auto":
+        if uses_padwork(course) and "lyric_starts" in course:
+            settings += f", {len(course['lyric_starts'])} timed lyric lines"
         return f"OK ({settings}): automatic course. Audio duration and generated actions are checked during preparation."
     arrange(actions, course, automatic=False)
     return (f"OK ({settings}): {len(actions)} manual actions, spacing checked. "

@@ -14,7 +14,9 @@ from PIL import Image, ImageChops, ImageStat
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "video"))
-from course import SCENES, fixed_scene
+from choreography import MIN_GAP
+from course import COUNTER_SIDES, COUNTER_STYLES, SCENES, fixed_scene
+from lyrics import LYRIC_STYLES
 
 
 def run(*args):
@@ -129,16 +131,20 @@ def main():
     p.add_argument("output",type=Path)
     p.add_argument("--check-cues",action="store_true",help="Check the four-punch regression fixture")
     p.add_argument("--song-title")
-    p.add_argument("--difficulty", choices=("easy", "normal"))
+    p.add_argument("--difficulty", choices=MIN_GAP)
     p.add_argument("--min-gap", type=float)
     p.add_argument("--beat-offset-ms", type=float)
     p.add_argument("--scene", type=fixed_scene, choices=SCENES)
+    p.add_argument("--lyrics", choices=LYRIC_STYLES)
+    p.add_argument("--combo-side", choices=COUNTER_SIDES)
+    p.add_argument("--combo-style", choices=COUNTER_STYLES)
     args=p.parse_args()
     config=json.loads(args.config.read_text())
     started=time.monotonic()
     cmd = [sys.executable, str(ROOT/"video/export.py"), args.config, args.output]
     for flag, value in (("--song-title", args.song_title), ("--difficulty", args.difficulty),
-                        ("--min-gap", args.min_gap), ("--beat-offset-ms", args.beat_offset_ms), ("--scene", args.scene)):
+                        ("--min-gap", args.min_gap), ("--beat-offset-ms", args.beat_offset_ms), ("--scene", args.scene),
+                        ("--lyrics", args.lyrics), ("--combo-side", args.combo_side), ("--combo-style", args.combo_style)):
         if value is not None:
             cmd.append(f"{flag}={value}")
     subprocess.run(cmd, check=True)

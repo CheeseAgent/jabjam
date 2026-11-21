@@ -68,6 +68,49 @@ class ArenaScenes(unittest.TestCase):
                     self.assertTrue(any(call.args[2].endswith(f"{step}/2") for call in draw.call_args_list[-6:]))
         self.assertEqual([n["time"] for n in notes], [4.01, 5.027])
 
+    def test_lyric_presets_clear_on_breaks_and_never_touch_the_targets(self):
+        lines = [{"time": 1, "text": "星光落进拳套 Let's move"}, {"time": 3, "text": ""},
+                 {"time": 5, "text": "句 03"}]
+        notes = [dict(time=4, action="left_jab")]
+        off = Arena("Test", {}, notes, 12, lyric_lines=lines)
+        samples = []
+        for style in ("fade", "rise", "pulse"):
+            arena = Arena("Test", {"lyrics": style}, notes, 12, lyric_lines=lines)
+            frame = arena.frame(1.09)
+            box = ImageChops.difference(frame, off.frame(1.09)).getbbox()
+            self.assertIsNotNone(box)
+            self.assertLessEqual(box[3], 210)
+            self.assertGreater(box[0], 200)
+            samples.append(frame.tobytes())
+            for t in (7, .5, 3.4, 5.4):
+                self.assertEqual(arena.frame(t).tobytes(), off.frame(t).tobytes())
+            self.assertEqual(arena.frame(1.09).tobytes(), samples[-1])
+        self.assertEqual(len(set(samples)), 3)
+
+    def test_streak_styles_sides_reset_and_pre_cue_are_seekable(self):
+        notes = [{"time": t, "action": "left_jab", "combo_name": "直直",
+                  "combo_step": i % 2 + 1, "combo_total": 2} for i, t in enumerate([4, 4.5, 9, 9.5])]
+        off = Arena("Test", {"combo_side": "off"}, notes, 12)
+        frames = []
+        for style in ("minimal", "arcade", "ring"):
+            for side in ("left", "right"):
+                arena = Arena("Test", {"combo_side": side, "combo_style": style}, notes, 12)
+                self.assertEqual(arena.hud.counts, [1, 2, 1, 2])
+                for t in (7, 9, 4):
+                    self.assertEqual(arena.frame(t).tobytes(), off.frame(t).tobytes())
+                at = arena.frame(4.5)
+                box = ImageChops.difference(at, off.frame(4.5)).getbbox()
+                self.assertTrue(box[2] < 300 if side == "left" else box[0] > 980)
+                frames.append(at.tobytes())
+        self.assertEqual(len(set(frames)), 6)
+        self.assertEqual(Arena("T", {"coach": {"enabled": True, "side": "left"}}, notes, 12).hud.side, "right")
+        with patch("workout_hud.text") as draw:
+            off.frame(6)
+            self.assertIn("回架", [c.args[2] for c in draw.call_args_list])
+            draw.reset_mock()
+            off.frame(8.1)
+            self.assertIn("下一组  ·  左起  ·  直直", [c.args[2] for c in draw.call_args_list])
+
 
 if __name__ == "__main__":
     unittest.main()
