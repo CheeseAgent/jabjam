@@ -61,8 +61,8 @@ class WorkoutHud:
         self.style = picture.get("combo_style", "arcade")
         self.counts = []
         for i, at in enumerate(times):
-            gap = times[i] - times[i-1] if i else float("inf")
-            self.counts.append(1 if gap >= self.reset_after(at) else self.counts[-1] + 1)
+            reset = i == 0 or at - times[i-1] >= self.reset_after(times[i-1])
+            self.counts.append(1 if reset else self.counts[-1] + 1)
 
     def beat(self, t):
         """Return local beat length and phase; authored charts can supply just a BPM."""
@@ -119,17 +119,25 @@ class WorkoutHud:
         age = t - start
         ramp = min(1., age/.16, (end-t)/.20)
         card = caption_card(self.words[i])
-        y = 132 + (round(13 * (1-ramp)) if self.lyric_style == "rise" else 0)
+        y = 132
+        if self.lyric_style == "rise":
+            y += round(17 * max(0., 1-age/.32)**2)
         x = (im.width - card.width)//2
         mask = card.getchannel("A")
         if ramp < 1:
             mask = mask.point(lambda a: round(a*ramp))
         im.paste(card, (x, y), mask)
-        if self.lyric_style == "pulse":
+        if self.lyric_style == "rise":
+            ImageDraw.Draw(im, "RGBA").rounded_rectangle((x+7, y+10, x+10, y+card.height-11),
+                                                         radius=2, fill=(*MINT, round(235*ramp)))
+        elif self.lyric_style == "pulse":
             pulse = (1 + cos(2*pi*self.beat(t)[1])) / 2
-            half = round(12 + 19*pulse)
-            ImageDraw.Draw(im, "RGBA").rounded_rectangle((640-half, y+card.height-4, 640+half, y+card.height-2),
-                                                         radius=1, fill=(*MINT, round(ramp*(115+140*pulse))))
+            d = ImageDraw.Draw(im, "RGBA")
+            d.rounded_rectangle((x, y, x+card.width-1, y+card.height-1), radius=14,
+                                outline=(*GOLD, round(ramp*(65+160*pulse))), width=2)
+            half = round((card.width-30) * (.16+.32*pulse))
+            d.rounded_rectangle((640-half, y+card.height-4, 640+half, y+card.height-2),
+                                radius=1, fill=(*GOLD, round(ramp*(115+140*pulse))))
 
     def draw_counter(self, im, count, age):
         cx = 122 if self.side == "left" else 1158
