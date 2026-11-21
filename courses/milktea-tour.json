@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "course": {
+    "song_title": "小奶茶 · 四景组合拳",
+    "music": "builtin:demo",
+    "movement_set": "padwork",
+    "difficulty": "normal"
+  },
+  "actions": "auto",
+  "picture": {
+    "scene": "art-tour",
+    "size": [1280, 720],
+    "fps": 30,
+    "coach": {"enabled": true, "renderer": "rig", "side": "right"}
+  }
+}

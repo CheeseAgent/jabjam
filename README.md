@@ -15,17 +15,34 @@
 
 ## 在 GitHub Actions 生成视频
 
-1. 打开 [Render follow-along MP4](https://github.com/CheeseAgent/jabjam/actions/workflows/render-video.yml)，点 **Run workflow**，选 `main`。保留默认参数可以生成一段约 37 秒的原创音乐组合拳练习。
-2. 想用其他课程，填写相对仓库根目录的 JSON 路径。也可以在表单里覆盖歌名、难度、最短间隔、拍点偏移和场景。默认 `neon` 有落日天际线、沿轨移动的灯带和随击打亮起的侧灯；`classic` 使用静态背景。
+1. 打开 [Render follow-along MP4](https://github.com/CheeseAgent/jabjam/actions/workflows/render-video.yml)，点 **Run workflow**，选择含所需课程的分支。保留默认参数可以生成一段约 37 秒的原创音乐组合拳练习。
+2. 想用其他课程，填写相对仓库根目录的 JSON 路径。也可以在表单里覆盖歌名、难度、最短间隔、拍点偏移和场景。想跟小奶茶练四景组合拳，课程填 `courses/milktea-tour.json`，场景选 `course`。下拉框也可以锁定任意一景。
 3. 运行成功后，在 **Summary** 点下载链接，解压播放 `jabjam.mp4`。压缩包保留 **7 天**，附上可编辑的 `jabjam-course.json` 和资源报告。自动课程还有 `jabjam.chart.json`，可对照实际拍点。
 
 手动运行默认只导出并检查所选课程。勾选最后一项会附加四拳和八动作短片、抽帧对照图与三分钟压力测试。相关 PR 和合入 `main` 的改动会自动跑完整验收。构建后的排谱和编码在断网容器内完成。使用仓库中的音乐时，把下载的 JSON 放回同一版仓库的 `build/video/`，它就能按相对路径找到歌曲。
 
-## 试验版音乐感知谱面（V2）
+## 小奶茶的四个场景
 
-自动模式现在根据四秒能量起伏动态调整每八拍的拳数：弱段落留白、普通段落稳定练习、强段落用短连拳穿插休息。真实主歌/副歌识别仍未实现，不保证每首歌精准。演示曲已增加强弱对比以方便试听。
+![小奶茶跟练画面，依次为海底办公室、水母电台、熊猫火锅和月球萝卜基地](docs/coach-preview/four-arenas.jpg)
 
-导出成功会生成与 MP4 同名的 `.chart.json`，记录每段能量、所有实际出拳时间、BPM 和置信度。若听感持续偏早/偏晚，在 Actions 的 `beat_offset_ms` 中输入 -100 或 100（负值提前、正值延后，范围 ±250ms）。这个校准不能修正错误的 BPM、半速/倍速误判或变速歌曲。复杂歌曲仍需要进一步改造节拍追踪。
+| 场景 | 画面 | `--scene` 或 Actions 选项 |
+| --- | --- | --- |
+| 海底摸鱼办公室 | 金鱼趴在文件堆上，身后是海底玻璃穹顶 | `undersea-office` |
+| 水母海盗电台 | 戴耳机的水母在海盗电台当 DJ | `jellyfish-radio` |
+| 熊猫火锅夜市 | 熊猫掌勺，鸳鸯锅和灯笼亮在左边 | `panda-hotpot` |
+| 月球萝卜基地 | 机器人把萝卜装车，远处停着萝卜火箭 | `moon-carrots` |
+
+`art-tour` 按上表顺序轮换，每次在下一组的第一拳换景。课程有四组以上时，按组数分成四段。没有组合标记的手排课程按动作分段。默认 `neon` 和 `classic` 仍可选。
+
+```sh
+python3 video/export.py courses/milktea-tour.json build/milktea-tour.mp4
+```
+
+## 自动谱怎样踩拍
+
+自动模式从音频的低频和全频起音估算速度，再根据前后几拍的共同重音微调每个拍点。热身、组合拳和侧步共用这条时间轴。音乐的四秒能量窗口决定何处加密和留白。
+
+导出生成的 `.chart.json` 记录原曲拍点 `source_beats`、最终动作 `notes`、BPM 和置信度。`beat_offset_ms` 可将全套动作提前或延后最多 250 毫秒，仅在自动编排完成后应用一次。视频里拳套到位、方块碎裂和拳序显示在离动作最近的同一帧。
 
 ## 固定组合拳练习（padwork）
 

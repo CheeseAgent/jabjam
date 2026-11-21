@@ -1,9 +1,12 @@
 """First-person rhythm arena, drawn one frame at a time on a 1280x720 canvas."""
 from bisect import bisect_left, bisect_right
 from functools import lru_cache
-from math import cos, pi, sin
+from math import ceil, cos, floor, pi, sin
+from pathlib import Path
 from random import Random
-from PIL import Image, ImageColor, ImageDraw, ImageFont
+from PIL import Image, ImageColor, ImageDraw, ImageFont, ImageOps
+
+from course import ART_HORIZONS
 
 from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
@@ -49,12 +52,21 @@ def text(im, xy, value, size, color=WHITE, bold=False, align="left"):
 
 class Arena:
     def __init__(self, title, picture, notes, duration):
-        self.notes = notes
-        self.times = [note["time"] for note in notes]
+        # Snap the presentation only. The chart and audio keep their source timestamps.
+        fps = picture.get("fps", 24)
+        last_frame = ceil(duration * fps) - 1
+        self.times = [min(last_frame, floor(note["time"] * fps + .5)) / fps for note in notes]
+        self.notes = [dict(note, time=t) for note, t in zip(notes, self.times)]
         self.duration = duration
         self.lead = picture.get("approach_seconds", 2)
         self.size = tuple(picture.get("size", [1280, 720]))
-        self.neon = picture.get("scene", "neon") == "neon"
+        self.title = title
+        selection = picture.get("scene", "neon")
+        self.stages = tuple(ART_HORIZONS) if selection == "art-tour" else (selection,)
+        # A cut belongs to the first strike of a new combo, even after a seek.
+        starts = [note["time"] for note in self.notes if note.get("combo_step", 1) == 1]
+        count = min(len(starts), len(self.stages))
+        self.cuts = [starts[i * len(starts) // count] for i in range(1, count)]
         self.colors = [ImageColor.getrgb(picture.get("left_color", "#63edce")),
                        ImageColor.getrgb(picture.get("right_color", "#ff916d"))]
         self.halo = Image.new("L", (96, 96))
@@ -63,8 +75,14 @@ class Arena:
             glow.ellipse((48-radius, 48-radius, 48+radius, 48+radius),
                          fill=round(155*(1-radius/48)**1.4))
         self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
-        self.base = self.background(title)
-        self.coach = CoachLayer(notes, picture.get("coach", {}))
+        self._set_stage(self.stages[0])
+        self.coach = CoachLayer(self.notes, picture.get("coach", {}))
+
+    def _set_stage(self, scene):
+        self.scene = scene
+        self.neon = scene == "neon"
+        self.horizon = ART_HORIZONS.get(scene, HORIZON)
+        self.base = self.background(self.title)
 
     def skyline(self, im, d):
         # All skyline lights and the graduated solar disc are painted once per course.
@@ -137,9 +155,21 @@ class Arena:
                             640+side*edge*depth, HORIZON+422*depth),
                            fill=light, width=max(1, round(5*depth)))
 
-    def background(self, title):
-        im = Image.new("RGB", (1280, 720), INK)
-        d = ImageDraw.Draw(im)
+    def illustrated_stage(self, im):
+        with Image.open(Path(__file__).resolve().parents[1] / "assets/arenas" / (self.scene + ".jpg")) as source:
+            stage = ImageOps.fit(source, (1280, 555), method=Image.Resampling.LANCZOS)
+        im.paste(stage, (0, 77))
+        # Shade just the score row and the two lanes; the painted floor stays visible.
+        overlay = ImageDraw.Draw(im, "RGBA")
+        for y in range(77, 157):
+            alpha = round(155 * (1 - (y - 77) / 80))
+            overlay.line((0, y, 1279, y), fill=(*INK, alpha))
+        for sign, color in zip((-1, 1), self.colors):
+            overlay.polygon([(640, self.horizon), (640+sign*505, 632), (640+sign*147, 632)],
+                            fill=(*INK, 53))
+            overlay.line((640, self.horizon, 640+sign*505, 632), fill=(*color, 125), width=2)
+
+    def procedural_stage(self, im, d):
         for y in range(77, 632):
             factor = max(0, 1 - abs(y-HORIZON)/360)
             d.line((0, y, 1280, y), fill=blend((11, 20, 34), (34, 58, 79), factor))
@@ -168,6 +198,14 @@ class Arena:
         if self.neon:
             for side, color in zip((-1, 1), self.colors):
                 self.pylons(d, side, color)
+
+    def background(self, title):
+        im = Image.new("RGB", (1280, 720), INK)
+        d = ImageDraw.Draw(im)
+        if self.scene in ART_HORIZONS:
+            self.illustrated_stage(im)
+        else:
+            self.procedural_stage(im, d)
         d.line((0,HIT_Y,1280,HIT_Y),fill=(135,159,176),width=2)
         for side, color in zip((-1,1), self.colors):
             x = 640+side*255
@@ -199,10 +237,9 @@ class Arena:
             text(im,(x+22,657),"左侧  /  LEFT" if sign<0 else "右侧  /  RIGHT",20,color,True)
         return im
 
-    @staticmethod
-    def position(side, u):
+    def position(self, side, u):
         p=.25*u+.75*u*u
-        return 640+side*(23+232*p), HORIZON+300*p, 11+58*p
+        return 640+side*(23+232*p), self.horizon+(HIT_Y-self.horizon)*p, 11+58*p
 
     def block(self, d, move, u, color):
         side = move.side
@@ -269,6 +306,9 @@ class Arena:
             d.polygon(star, fill=hot)
 
     def frame(self,t):
+        stage = self.stages[bisect_right(self.cuts, t)]
+        if stage != self.scene:
+            self._set_stage(stage)
         im=self.base.copy()
         d=ImageDraw.Draw(im)
         index=bisect_right(self.times,t)
@@ -296,25 +336,30 @@ class Arena:
         self.coach.draw(im, t)
         im.paste(self.base.crop((0,632,1280,720)),(0,632))
         if t < self.times[0] - self.lead:
+            if self.scene in ART_HORIZONS:
+                ImageDraw.Draw(im, "RGBA").rounded_rectangle((385, 273, 895, 392), radius=16, fill=(*INK, 192))
             text(im,(640,295),"跟随拍点 · 准备开始",36,WHITE,True,"center")
             text(im,(640,352),"直箭头打直拳   /   横弯打摆拳   /   上挑打上勾拳",20,DUSK,False,"center")
+        cue = None
         if index and t - self.times[index - 1] < .25:
-            move = MOVEMENTS[self.notes[index - 1]["action"]]
+            cue = self.notes[index - 1]
+            move = MOVEMENTS[cue["action"]]
             verb = "落步" if move.kind == "step" else "击打"
             label = f"{verb}  /  {move.label}"
         elif index < len(self.notes):
-            label = "准备  /  " + MOVEMENTS[self.notes[index]["action"]].label
+            cue = self.notes[index]
+            label = "准备  /  " + MOVEMENTS[cue["action"]].label
         else:
             label = "收势  /  放松"
         text(im,(640,650),label,26,WHITE,True,"center")
         hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
         text(im,(640,692),hint,15,DUSK,False,"center")
-        if index < len(self.notes) and self.notes[index].get("combo_name"):
-            note = self.notes[index]
-            caption = f"组合拳  /  {note['combo_name']}     {note['combo_step']}/{note['combo_total']}"
+        if cue and cue.get("combo_name"):
+            caption = f"组合拳  /  {cue['combo_name']}     {cue['combo_step']}/{cue['combo_total']}"
             text(im,(640,107),caption,25,WHITE,True,"center")
         elapsed=int(t)
         text(im,(42,104),f"{elapsed//60:02d}:{elapsed%60:02d}",25,WHITE,True)
-        text(im,(1234,106),f"{index:02d}  /  {len(self.notes):02d}",22,DUSK,True,"right")
+        count_color = WHITE if self.scene in ART_HORIZONS else DUSK
+        text(im,(1234,106),f"{index:02d}  /  {len(self.notes):02d}",22,count_color,True,"right")
         d.line((0,717,1280*t/self.duration,717),fill=self.colors[0],width=4)
         return im if self.size==im.size else im.resize(self.size,Image.Resampling.BILINEAR)

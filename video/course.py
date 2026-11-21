@@ -6,7 +6,9 @@ from choreography import MIN_GAP, arrange
 from movements import MOVEMENTS
 from coach_timeline import validate_coach_config
 
-SCENES = ("neon", "classic")
+# Floor vanishing points on the 1280x720 canvas, with the artwork between the HUD bars.
+ART_HORIZONS = {"undersea-office": 338, "jellyfish-radio": 300, "panda-hotpot": 280, "moon-carrots": 331}
+SCENES = ("neon", "classic", *ART_HORIZONS, "art-tour")
 
 
 def fields(obj, allowed, label):
@@ -58,7 +60,7 @@ def read_picture(picture, scene):
     if scene is not None:
         picture["scene"] = scene
     if picture.get("scene", "neon") not in SCENES:
-        raise ValueError("picture.scene must be neon or classic")
+        raise ValueError("picture.scene must be one of " + ", ".join(SCENES))
     size = picture.get("size", [1280, 720])
     if size not in ([640, 360], [960, 540], [1280, 720]) or any(type(n) is not int for n in size):
         raise ValueError("picture.size must be [640, 360], [960, 540] or [1280, 720]")

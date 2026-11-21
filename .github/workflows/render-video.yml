@@ -22,9 +22,9 @@ on:
         description: 自动谱拍点校准（毫秒，-250 到 +250；正数延后）
         type: string
       scene:
-        description: 场景（course 沿用课程，neon 动态霓虹，classic 经典）
+        description: 场景（course 沿用课程，art-tour 随组合切换四景）
         type: choice
-        options: [course, neon, classic]
+        options: [course, neon, classic, undersea-office, jellyfish-radio, panda-hotpot, moon-carrots, art-tour]
         default: course
       verify_samples:
         description: 额外生成验收短片并跑三分钟压力测试
@@ -34,6 +34,7 @@ on:
     paths:
       - 'video/**'
       - 'assets/coaches/**'
+      - 'assets/arenas/**'
       - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
@@ -47,6 +48,7 @@ on:
     paths:
       - 'video/**'
       - 'assets/coaches/**'
+      - 'assets/arenas/**'
       - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
@@ -109,6 +111,7 @@ jobs:
           if [[ "$VERIFY_SAMPLES" != true ]]; then exit 0; fi
           echo "::group::Pacing and authoring tests"
           offline python3 tests/test_video_pacing.py
+          offline python3 tests/test_arena_scenes.py
           offline python3 tests/test_coach_avatar.py
           offline python3 tests/test_cutout_rig.py
           echo "::endgroup::"

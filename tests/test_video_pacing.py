@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "video"))
-from export import config, prepare
+from export import calibrated_notes, config, prepare
 from choreography import MIN_GAP, arrange, pace_notes
 from movements import MOVEMENTS
 
@@ -101,6 +101,25 @@ class VideoPacing(unittest.TestCase):
                  __import__("choreography").required_gap(
                      MOVEMENTS[a["action"]], MOVEMENTS[b["action"]], course))
         self.assertEqual(result, arrange(seed, course, True, chart))
+
+    def test_combos_use_the_supplied_beat_grid(self):
+        beats = [round(i * .5 + (.19 if i < 32 else .25), 3) for i in range(120)]
+        chart = {"bpm": 120, "duration": 60, "beats": beats, "sections": [{"intensity": .9}] * 15}
+        seed = [{"time": 4 + i * .5, "action": "left_jab"} for i in range(64)]
+        notes = arrange(seed, dict(self.course, min_gap=.45, movement_set="padwork"), True, chart)
+        self.assertGreater(notes[-1]["time"], 50)
+        self.assertTrue(all(note["time"] in beats for note in notes))
+        for offset in (-200, 150):
+            shifted = calibrated_notes(notes, offset, 60)
+            self.assertEqual([round(n["time"] - m["time"], 3) for n, m in zip(shifted, notes)],
+                             [offset / 1000] * len(notes))
+
+    def test_calibration_drops_only_whole_boundary_combos(self):
+        notes = [{"time": t, "combo_no": group} for t, group in
+                 [(3.05, 1), (3.6, 1), (8, 2), (8.5, 2), (19, 3), (19.55, 3)]]
+        notes.append({"time": 19.59})
+        self.assertEqual([n.get("combo_no") for n in calibrated_notes(notes, -200, 20)], [2, 2, 3, 3, None])
+        self.assertEqual([n["combo_no"] for n in calibrated_notes(notes, 200, 20)], [1, 1, 2, 2])
 
     def test_padwork_mirrors_and_respects_fast_tempos(self):
         from choreography import required_gap
