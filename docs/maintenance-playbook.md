@@ -24,6 +24,42 @@
 | 优化画面或字体 | `video/arena.py`, `video/cue_art.py` | 场景测试、编码短片、HUD 与命中帧检查 | 让视觉层改变编排顺序或曲目时间戳 |
 | 私有出片工作流 | `jabjam-render` 的 `.github/workflows/render-video.yml` | 私有动作工作流和私人歌曲烟雾测试 | 拷贝私有音乐进公开仓库；把私有内容写到公开 Actions |
 
+## 给新歌找逐行歌词
+
+收到音频就可以开始准备。先看私有课程的 `course.lyric_starts`，再看音频旁边的同名 `.lrc`。同一版录音已经校准过就直接复用，换场景也能用。两处都没有时，小奶茶在能联网的调度端用**歌名和歌手**找时间轴，音频留在私有出片流程里。没有分享链接时，可以在百度搜 `歌名 歌手 site:music.163.com/song`，或换成下表中相应的平台域名，进入单曲页。
+
+| 查找顺序 | 去哪里找、取什么 |
+| --- | --- |
+| 1. 酷狗音乐 | 搜歌名和歌手，进入对应专辑的**单曲页**。部分单曲页的歌词正文已经带 `[分:秒.小数]`，用普通网页请求就能读取。[酷狗搜索](https://www.kugou.com/yy/html/search.html) |
+| 2. 网易云音乐 | 从歌曲分享链接或单曲页取数字 `id`，请求 `https://music.163.com/api/song/lyric?id=数字ID&lv=-1`。取 JSON 中的 `lrc.lyric`，里面是带时间的原文。[网易云音乐](https://music.163.com/) |
+| 3. 酷我音乐 | 从酷我单曲链接取它自己的数字 ID，请求 `https://m.kuwo.cn/newh5/singles/songinfoandlrc?musicId=数字ID`。在 `data.lrclist` 里按 `lineLyric` 识别演唱行，`time` 是从原曲起点计算的**秒**，可以直接整理成 `course.lyric_starts`。[酷我音乐](https://www.kuwo.cn/) |
+| 4. QQ 音乐 | 用单曲页核对歌手、专辑和版本。如果已有桌面工具 LDDC，可选择 QQ 音乐源，搜索同一录音并保存「原文／逐行 LRC」。服务器只收到网页外壳或纯文本时，继续查下一项。[QQ 音乐](https://y.qq.com/) · [LDDC 使用指南](https://github.com/chenmozhijin/LDDC/wiki) |
+| 5. AMLL 社区词库 | 直接请求 `https://api.amll.dev/v1/lrclib/search`，传 `track_name` 和 `artist_name`，从匹配项取 `syncedLyrics`。这个库返回的 `duration` 是最后一个歌词时间戳，歌曲尾奏可能更长。[AMLL 接口说明](https://amll.dev/reference/http-api/lrclib.html) |
+| 6. LRCLIB | 网络可达时作为补充。用 `https://lrclib.net/api/search` 加相同的两个参数找候选，也可用 `/api/get` 加专辑名和原曲时长（秒）缩小范围。请求带标识客户端的 `User-Agent`，选 `syncedLyrics` 有值的版本。[LRCLIB 接口说明](https://lrclib.net/docs.txt) |
+
+**调度端可以这样试一首歌。** 下面用 Python 3 和一个公开曲目 ID 检查网易云能否返回时间标签。把第一行里的数字换成目标歌曲的网易云 ID 即可再查。各站的歌曲 ID 只在本站使用。
+
+```sh
+python3 - 186016 <<'PY'
+import json, re, sys
+from urllib.request import urlopen
+
+url = f"https://music.163.com/api/song/lyric?id={int(sys.argv[1])}&lv=-1"
+try:
+    with urlopen(url, timeout=10) as response:
+        lrc = (json.load(response).get("lrc") or {}).get("lyric") or ""
+except (OSError, ValueError) as error:
+    sys.exit(f"网易云本次无法读取，请换源 ({error})")
+print("时间标签数", len(re.findall(r"\[\d+:[0-5]\d(?:[.:]\d{1,3})?\]", lrc)))
+PY
+```
+
+**选版本和交付**
+
+1. 对照歌手、专辑、录音室／现场／剪辑版和原曲时长。抽听第一句、中间一句和末段一句。若开头对得上、后半首逐渐偏离，换一个版本。只保留实际唱出的句子，去掉带时间的制作名单、空行和重复译文。
+2. 时间对齐后，在私有歌曲目录把 UTF-8 逐行歌词与音频同名保存，例如 `round.mp3` 配 `round.lrc`。只留句首也可以写成 `[00:15.42]句 01`，或把秒数填入 `course.lyric_starts`。在标准难度自动喂靶课程上运行 `python3 -S video/export.py "$course_json" --check`（`course_json` 指向该课程），输出 `N timed lyric lines` 即表示已读入。[课程字段和时间示例](video-export.md#按歌词起拳)
+3. 以调度端当次拿到的有效时间标签判断可用性。超时、空结果、只有纯文本或版本对不上就换源。找不到匹配的时间轴时，把候选文件留在歌曲目录之外，本次课程省略 `lyric_starts`，音频旁也不放同名 LRC，照常出片并说明「本次按节拍编排」。纯音乐也走这条路径。
+
 ## 不变量：务必保留
 
 - `note.time` 是从原曲开头计算的秒；视频只负责按帧显示。默认渲染 FPS 取整也不能改变歌曲和可编辑谱面的事件时间。

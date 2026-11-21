@@ -2,9 +2,10 @@
 import json
 import re
 
-from choreography import MIN_GAP, arrange
+from choreography import MIN_GAP, arrange, uses_padwork
 from movements import MOVEMENTS
 from coach_timeline import validate_coach_config
+from lyrics import read_lrc_starts
 
 # Floor vanishing points on the 1280x720 canvas, with the artwork between the HUD bars.
 ART_HORIZONS = {"undersea-office": 338, "jellyfish-radio": 300, "panda-hotpot": 280, "moon-carrots": 331}
@@ -87,7 +88,7 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
     if type(data.get("version")) is not int or data["version"] != 1:
         raise ValueError("version must be the integer 1")
     course = fields(data.get("course"), ("title", "song_title", "music", "difficulty", "bpm", "min_gap",
-                                         "movement_set", "beat_offset_ms"), "course")
+                                         "movement_set", "beat_offset_ms", "lyric_starts"), "course")
     if course.get("movement_set", "classic") not in ("classic", "mixed", "padwork"):
         raise ValueError("course.movement_set must be classic, mixed or padwork")
     if song_title is not None:
@@ -115,7 +116,20 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
         number(course["bpm"], 60, 180, "course.bpm")
     offset = course.get("beat_offset_ms", 0) if beat_offset_ms is None else beat_offset_ms
     course["beat_offset_ms"] = number(offset, -250, 250, "course.beat_offset_ms")
-    return course, music, read_actions(data.get("actions", "auto")), read_picture(data.get("picture", {}), scene)
+    actions = read_actions(data.get("actions", "auto"))
+    if "lyric_starts" not in course and actions == "auto" and uses_padwork(course) and music != "builtin:demo":
+        companion = music.with_suffix(".lrc")
+        if companion.is_file():
+            course["lyric_starts"] = read_lrc_starts(companion)
+    if "lyric_starts" in course:
+        starts = course["lyric_starts"]
+        if not isinstance(starts, list) or not starts:
+            raise ValueError("course.lyric_starts must be a nonempty list of line start times in seconds")
+        starts = [round(number(t, 0, 600, "course.lyric_starts"), 3) for t in starts]
+        if any(a >= b for a, b in zip(starts, starts[1:])):
+            raise ValueError("course.lyric_starts must increase at millisecond precision")
+        course["lyric_starts"] = starts
+    return course, music, actions, read_picture(data.get("picture", {}), scene)
 
 
 def check_course(path, **overrides):
@@ -123,6 +137,8 @@ def check_course(path, **overrides):
     course, _, actions, _ = config(path, **overrides)
     settings = f"{course['difficulty']}, min_gap {course['min_gap']:g}s"
     if actions == "auto":
+        if uses_padwork(course) and "lyric_starts" in course:
+            settings += f", {len(course['lyric_starts'])} timed lyric lines"
         return f"OK ({settings}): automatic course. Audio duration and generated actions are checked during preparation."
     arrange(actions, course, automatic=False)
     return (f"OK ({settings}): {len(actions)} manual actions, spacing checked. "

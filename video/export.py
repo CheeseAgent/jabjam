@@ -10,7 +10,7 @@ import tempfile
 import time
 
 from course import SCENES, check_course, config, fixed_scene, number
-from choreography import MIN_GAP, arrange
+from choreography import MIN_GAP, arrange, uses_padwork
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -56,6 +56,8 @@ def prepare(course, music, actions, tmp):
     else:
         notes = arrange(actions, course, False)
     if not notes:
+        if actions == "auto" and uses_padwork(course) and "lyric_starts" in course:
+            raise ValueError("No whole combination fits the timed lyric lines. Check line times, song version and min_gap")
         raise ValueError("No actions fit after spacing and beat offset. Reduce min_gap or try movement_set classic")
     last_time = notes[-1]["time"]
     if last_time >= duration:
@@ -105,6 +107,8 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
                        "tempo_confidence": chart.get("confidence"),
                        "beat_offset_ms": course["beat_offset_ms"],
                        "source_beats": chart["beats"], "sections": chart.get("sections", []), "notes": notes}
+        if uses_padwork(course) and "lyric_starts" in course:
+            diagnostics["lyric_starts"] = course["lyric_starts"]
         output.with_suffix(".chart.json").write_text(
             json.dumps(diagnostics, ensure_ascii=False, indent=2) + "\n")
     shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)

@@ -114,6 +114,41 @@ class VideoPacing(unittest.TestCase):
             self.assertEqual([round(n["time"] - m["time"], 3) for n, m in zip(shifted, notes)],
                              [offset / 1000] * len(notes))
 
+    def test_lyric_pickups_lead_and_followups_stay_on_calibrated_beats(self):
+        beats = [round(i * .5 + (.07 if i < 24 else .12), 3) for i in range(90)]
+        chart = {"bpm": 120, "duration": 44, "beats": beats, "sections": [{"intensity": .95}] * 11}
+        seed = [{"time": 4, "action": "left_jab"}]
+        # The line at 13.74 is too short even for a pair. The later long gap is instrumental.
+        starts = [2.9, 3.13, 8.36, 13.74, 14.17, 16.26, 31.33, 43.5]
+        for offset in (-170, 0, 215):
+            with self.subTest(offset=offset):
+                course = dict(self.course, min_gap=.45, movement_set="padwork", lyric_starts=starts,
+                              beat_offset_ms=offset)
+                notes = calibrated_notes(arrange(seed, course, True, chart), offset, chart["duration"])
+                leads = [n for n in notes if n["combo_step"] == 1]
+                self.assertEqual([n["time"] for n in leads], [3.13, 8.36, 14.17, 16.26, 31.33])
+                self.assertEqual([n["action"] for n in leads[:2]], ["left_jab", "right_jab"])
+                self.assertEqual([n["combo_total"] for n in leads[:2]], [5, 5])
+                self.assertLess(leads[2]["combo_total"], 5)
+                grid = {round(t + offset / 1000, 3) for t in beats}
+                for lead in leads:
+                    group = [n for n in notes if n["combo_no"] == lead["combo_no"]]
+                    self.assertEqual([n["combo_step"] for n in group], list(range(1, lead["combo_total"] + 1)))
+                    self.assertTrue(all(n["time"] in grid for n in group[1:]))
+                    self.assertLessEqual(group[-1]["time"] + .9, starts[lead["combo_no"]] + 1e-9)
+                self.assertEqual(arrange(notes, course, False), notes)
+
+    def test_lyric_recovery_survives_fractional_millisecond_calibration(self):
+        bpm = 91
+        beats = [round(i * 60 / bpm + .07, 3) for i in range(75)]
+        chart = {"bpm": bpm, "duration": 50, "beats": beats, "sections": [{"intensity": .95}] * 13}
+        course = dict(self.course, min_gap=60 / bpm, movement_set="padwork", beat_offset_ms=249.5,
+                      lyric_starts=[3.13, 9.1, 15.6, 21.75, 28.12, 34.63, 45.0])
+        notes = arrange([{"time": 4, "action": "left_jab"}], course, True, chart)
+        saved = calibrated_notes(notes, 249.5, 50)
+        self.assertGreater(len(saved), 10)
+        self.assertEqual(arrange(saved, course, False), saved)
+
     def test_calibration_drops_only_whole_boundary_combos(self):
         notes = [{"time": t, "combo_no": group} for t, group in
                  [(3.05, 1), (3.6, 1), (8, 2), (8.5, 2), (19, 3), (19.55, 3)]]
@@ -268,6 +303,61 @@ class CourseCLI(unittest.TestCase):
                 result = self.cli(source, *args, no_tools=True)
                 self.assertEqual(result.returncode, 2, result.stderr)
         self.assertEqual(list(self.work.iterdir()), [])
+
+    def test_lrc_discovery_inline_override_and_other_course_modes(self):
+        audio = self.work / "song.ogg"
+        shutil.copyfile(ROOT / "tests/fixtures/pulse.ogg", audio)
+        source = self.work / "training.json"
+        course = {"music": audio.name, "movement_set": "padwork"}
+        def save(actions="auto"):
+            source.write_text(json.dumps({"version": 1, "course": course, "actions": actions}))
+        save()
+        self.assertNotIn("lyric_starts", config(source)[0])
+        lyrics = audio.with_suffix(".lrc")
+        lyrics.write_text("[ar:Coach]\n[00:12.25][00:04.2]Again\n[00:04.20]Translation\n"
+                          "[00:05.88]\n[00:08.678]Next\n[00:10.0][Instrumental]\n[offset:+100]\n",
+                          encoding="utf-8-sig")
+        self.assertEqual(config(source)[0]["lyric_starts"], [4.1, 8.578, 12.15])
+        self.assertIn("3 timed lyric lines", self.cli(source, "--check", no_tools=True).stdout)
+        lyrics.write_text("words without timing")
+        with self.assertRaisesRegex(ValueError, "no timed lyric lines"):
+            config(source)
+        self.assertNotIn("lyric_starts", config(source, difficulty="easy")[0])
+        course["movement_set"] = "mixed"
+        save()
+        self.assertNotIn("lyric_starts", config(source)[0])
+        course["movement_set"] = "padwork"
+        save([{"time": 4.1, "action": "left_jab"}])
+        self.assertNotIn("lyric_starts", config(source)[0])
+        course["lyric_starts"] = [6.3, 10.2]
+        save()
+        self.assertEqual(config(source)[0]["lyric_starts"], [6.3, 10.2])
+        for bad in ([], "4.2", [True], [3.4, 3.4], [4, 3], [-1], [601]):
+            with self.subTest(bad=bad):
+                course["lyric_starts"] = bad
+                save()
+                with self.assertRaisesRegex(ValueError, "course.lyric_starts"):
+                    config(source)
+
+    @unittest.skipUnless(shutil.which("godot") and shutil.which("ffprobe"), "automatic charts need Godot and ffprobe")
+    def test_write_lyric_course_freezes_the_same_pickups(self):
+        audio = self.work / "pulse.ogg"
+        shutil.copyfile(ROOT / "tests/fixtures/pulse.ogg", audio)
+        lyrics = audio.with_suffix(".lrc")
+        lyrics.write_text("[00:03.23]One\n[00:10.21]Two\n[00:18.17]Three\n[offset:-100]\n")
+        source = self.work / "auto.json"
+        source.write_text(json.dumps({"version": 1, "course": {"music": audio.name, "movement_set": "padwork"}}))
+        frozen = self.work / "drafts" / "frozen.json"
+        run = self.cli(source, "--write-course", frozen, "--beat-offset-ms=120")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        draft = json.loads(frozen.read_text())
+        leads = [n["time"] for n in draft["actions"] if n["combo_step"] == 1]
+        self.assertEqual(leads, [3.33, 10.31, 18.27])
+        lyrics.unlink()
+        again = self.work / "again.json"
+        run = self.cli(frozen, "--write-course", again, "--beat-offset-ms=-150")
+        self.assertEqual(run.returncode, 0, run.stderr)
+        self.assertEqual(json.loads(again.read_text())["actions"], draft["actions"])
 
     @unittest.skipUnless(shutil.which("ffprobe"), "writing a course probes its audio with ffprobe")
     def test_write_manual_course_relocates_music_and_preserves_edits(self):
