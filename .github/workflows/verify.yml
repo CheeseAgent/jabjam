@@ -11,8 +11,8 @@ jobs:
     steps:
       - uses: actions/checkout@v5
       - name: Build Linux validation image
-        run: docker build --platform linux/amd64 -t jabjam-check .
-      - name: Import, test, and boot the game
-        run: docker run --rm --network none --cpus=2 --memory=1536m --memory-swap=1536m jabjam-check
+        run: docker build --platform linux/amd64 --target video-export -t jabjam-check .
+      - name: All Python regressions plus Godot import, tests and boot
+        run: docker run --rm --network none --cpus=2 --memory=1536m --memory-swap=1536m jabjam-check sh scripts/verify_all.sh --ci
       - name: Test and boot a fresh container with 256 MiB and no swap
         run: docker run --rm --network none --cpus=2 --memory=256m --memory-swap=256m jabjam-check sh scripts/verify.sh --runtime-only
