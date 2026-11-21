@@ -100,7 +100,7 @@ python3 video/export.py build/my-round.json build/my-round.mp4
 
 ## 接手代码时从哪里改
 
-[仓库根目录的 AGENTS.md](AGENTS.md) 把改课程、调节奏、加组合和改画面分别对应到文件、函数和验收命令。可以先运行 `python3 video/export.py courses/eight-moves.json --check`，确认能读出 8 个手排动作。
+[仓库根目录的 AGENTS.md](AGENTS.md) 把改课程、调节奏、加组合和改画面分别对应到文件、函数和验收命令。详细的任务修改边界、验证命令和失败排查见 [小奶茶维护操作手册](docs/maintenance-playbook.md)。可以先运行 `python3 video/export.py courses/eight-moves.json --check`，确认能读出 8 个手排动作。
 
 ## 早期交互原型
 

@@ -1,5 +1,22 @@
 # 接手 JabJam
 
+## 维护铁律（弱模型必须遵守）
+
+**唯一真相来源：** 公开仓库 `CheeseAgent/jabjam` 的 `main` 管理渲染引擎；私有仓库 `CheeseAgent/jabjam-render` 负责个人音频和工作流。后者的旧 Python/Godot 源文件是回退档案，禁止两边同时修改同一模块。私人音频、歌曲文件、私有课程、token 均不可进入本仓库。
+
+**所有修改先开特性分支和 PR，不直接向 `main` 推送。** 每个 PR 只解决一个清楚的问题；先记录测试基线，再修改，最后写明改动、风险、测试输出和如何回退。CI 未通过时不得合并，不得通过删除、跳过或放宽失败测试掩盖问题。
+
+下面这些契约对所有 `video/`、Godot 和素材改动都有效：
+
+1. `actions[].time` 是相对于原曲开头的**秒**，不是帧号；动作 ID 见 `video/movements.py`。左/右始终代表**跟练者屏幕侧**，不可私自反转。
+2. 编舞与教练共用同一份最终谱面。`beat_offset_ms` 只在最终自动编排后应用一次；`Arena` 可以仅在绘制时按 FPS 取整，但不可回写或改变音乐时间轴。
+3. `PADWORK_COMBOS` 必须保持整组、镜像与恢复间隔；不得为增加密度而拆散训练乐句。变速、切分或主副歌识别尚无质量保证，禁止宣称已解决。
+4. `CoachTimeline.at(song_seconds)` 无状态、可跳转；动作、骨骼锚点和遮挡更新不能改变课程动作顺序或计分 ID。`assets/coaches/milktea/rig/motions.json` 和 `rig.json` 是 Godot 与 Python 共用的数据协议。
+5. 每首歌的 `picture.scene` 在渲染前确定，**整首固定**。增加一个插画场景至少要同步 `assets/arenas/`、`video/course.py`、`video/arena.py`、Actions 场景选项与 `tests/test_arena_scenes.py`。
+6. 私有音频只能在私有 Actions 内通过断网容器只读挂载。小奶茶所在的低内存服务器只调度任务，不在本机转码长视频。
+
+详细任务-文件-验收矩阵见 [Agent 维护操作手册](docs/maintenance-playbook.md)。**改之前先读任务对应的小节，不要一次性阅读并重写整仓库。**
+
 主分支 `main` 包含本地音乐跟练视频生成器、课程样例和早期 Godot 交互原型。生成视频的入口是仓库根目录下的 `video/export.py`。
 
 导出从 [export.py](video/export.py) 开始。`config` 读课程，`prepare` 取得音乐和成片动作，两种输出共用这一步。`write_course` 把动作写回 JSON，`export` 交给 `Arena.frame` 逐帧绘制，再用 FFmpeg 编码。
