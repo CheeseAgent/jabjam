@@ -19,7 +19,46 @@ static func fixture(bpm := 120.0, silent := false) -> AudioStreamWAV:
 	stream.data = bytes
 	return stream
 
+# Independent reference times: a fractional BPM, nonzero start, and a short
+# passage that pushes forward by 60ms then returns to the original phase.
+static func measured_pulse_test(check: Callable) -> void:
+	var bpm := 117.3
+	var rate := 8000
+	var duration := 93.0
+	var expected: Array[float] = []
+	var bytes := PackedByteArray()
+	bytes.resize(int(duration * rate) * 2)
+	for beat in range(180):
+		var shift := 0.06 * clampf(minf((beat - 40) / 8.0, (85 - beat) / 8.0), 0.0, 1.0)
+		var at := 0.173 + beat * 60.0 / bpm + shift
+		expected.append(at)
+		var start := roundi(at * rate)
+		for sample in range(400):
+			var t := float(sample) / rate
+			bytes.encode_s16((start+sample)*2, roundi(22000 * exp(-55*t) * sin(TAU*95*t)))
+	var stream := AudioStreamWAV.new()
+	stream.format = AudioStreamWAV.FORMAT_16_BITS
+	stream.mix_rate = rate
+	stream.data = bytes
+	var chart := Generator.generate(Generator.analyze(stream), "measured", duration)
+	check.call(not chart.has("error") and absf(chart.get("bpm", 0) - bpm) < 0.10,
+		"Fractional BPM resolves across a long recording")
+	if chart.has("error"):
+		return
+	var worst := 0.0
+	for i in range(1, expected.size()-1):
+		# Count a missed beat too; an algorithm cannot improve by dropping difficult hits.
+		var error := 1.0
+		var nearest: int = chart.beats.bsearch(expected[i])
+		for j in range(maxi(0, nearest-1), mini(chart.beats.size(), nearest+1)):
+			error = minf(error, absf(chart.beats[j] - expected[i]))
+		worst = maxf(worst, error)
+	check.call(worst < 0.026, "Pulse grid follows a shifted passage and the final bars within 26ms (%.3fs)" % worst)
+	check.call(chart.notes.all(func(note: Dictionary) -> bool: return note.time in chart.beats),
+		"Every generated punch uses a measured beat")
+
 static func run(tree: SceneTree, check: Callable) -> void:
+	measured_pulse_test(check)
 	var source := fixture()
 	var analysis := Generator.analyze(source)
 	check.call(not analysis.has("error"), "PCM audio can be analyzed offline")

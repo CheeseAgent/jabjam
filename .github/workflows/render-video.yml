@@ -22,9 +22,9 @@ on:
         description: 自动谱拍点校准（毫秒，-250 到 +250；正数延后）
         type: string
       scene:
-        description: 场景（course 沿用课程，neon 动态霓虹，classic 经典）
+        description: 整首歌使用的场景（course 沿用课程设置）
         type: choice
-        options: [course, neon, classic]
+        options: [course, neon, classic, undersea-office, jellyfish-radio, panda-hotpot, moon-carrots]
         default: course
       verify_samples:
         description: 额外生成验收短片并跑三分钟压力测试
@@ -33,6 +33,9 @@ on:
   pull_request:
     paths:
       - 'video/**'
+      - 'assets/coaches/**'
+      - 'assets/arenas/**'
+      - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
       - 'tests/**'
@@ -44,6 +47,9 @@ on:
     branches: [main]
     paths:
       - 'video/**'
+      - 'assets/coaches/**'
+      - 'assets/arenas/**'
+      - 'scenes/**'
       - 'courses/**'
       - 'scripts/**'
       - 'tests/**'
@@ -105,6 +111,14 @@ jobs:
           if [[ "$VERIFY_SAMPLES" != true ]]; then exit 0; fi
           echo "::group::Pacing and authoring tests"
           offline python3 tests/test_video_pacing.py
+          offline python3 tests/test_arena_scenes.py
+          offline python3 tests/test_coach_avatar.py
+          offline python3 tests/test_cutout_rig.py
+          echo "::endgroup::"
+
+          echo "::group::Full-body coach demonstration"
+          offline python3 video/export.py courses/coach-demo.json "$out/coach-demo.mp4"
+          offline python3 tests/check_coach_sample.py "$out/coach-demo.mp4"
           echo "::endgroup::"
 
           echo "::group::Four-punch waveform and eight-movement frames"

@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "course": {
+    "song_title": "小奶茶全身教练 · 八动作验收",
+    "music": "../tests/fixtures/pulse.ogg",
+    "difficulty": "normal"
+  },
+  "actions": [
+    {"time": 4.0, "action": "left_jab"},
+    {"time": 6.0, "action": "right_jab"},
+    {"time": 8.0, "action": "left_hook"},
+    {"time": 10.0, "action": "right_hook"},
+    {"time": 12.5, "action": "left_uppercut"},
+    {"time": 15.0, "action": "right_uppercut"},
+    {"time": 18.0, "action": "step_left"},
+    {"time": 20.5, "action": "step_right"}
+  ],
+  "picture": {
+    "size": [1280, 720],
+    "fps": 24,
+    "approach_seconds": 2,
+    "coach": {"enabled": true, "renderer": "rig", "side": "right", "scale": 1.0}
+  }
+}

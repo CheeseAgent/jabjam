@@ -9,10 +9,21 @@ import sys
 import tempfile
 import time
 
-from course import SCENES, check_course, config, number
+from course import SCENES, check_course, config, fixed_scene, number
 from choreography import MIN_GAP, arrange
 
 ROOT = Path(__file__).resolve().parents[1]
+
+
+def calibrated_notes(timeline, offset_ms, duration):
+    """Shift the final onsets once and keep boundary-clipped combos intact or absent."""
+    shifted = [dict(note, time=round(note["time"] + offset_ms / 1000.0, 3)) for note in timeline]
+
+    def in_song(note):
+        return 3.0 <= note["time"] < duration - 0.4
+
+    clipped = {note["combo_no"] for note in shifted if "combo_no" in note and not in_song(note)}
+    return [note for note in shifted if in_song(note) and note.get("combo_no") not in clipped]
 
 
 def prepare(course, music, actions, tmp):
@@ -40,14 +51,12 @@ def prepare(course, music, actions, tmp):
     chart = None
     if actions == "auto":
         chart = json.loads(chart_file.read_text())
-        notes = chart["notes"]
-        offset = course["beat_offset_ms"] / 1000.0
-        notes = [dict(note, time=round(note["time"] + offset, 3)) for note in notes
-                 if 3.0 <= note["time"] + offset < duration - 0.4]
+        timeline = arrange(chart["notes"], course, True, chart)
+        notes = calibrated_notes(timeline, course["beat_offset_ms"], duration)
     else:
-        notes = actions
+        notes = arrange(actions, course, False)
     if not notes:
-        raise ValueError("No notes remain after beat offset correction")
+        raise ValueError("No actions fit after spacing and beat offset. Reduce min_gap or try movement_set classic")
     last_time = notes[-1]["time"]
     if last_time >= duration:
         raise ValueError(f"Last action at {last_time:g}s must fall before the end of the music ({duration:g}s)")
@@ -56,10 +65,7 @@ def prepare(course, music, actions, tmp):
             for key, value in owner.get("tags", {}).items()}
     fallback = "JabJam Demo Loop" if music == "builtin:demo" else audio.stem
     title = " ".join((course.get("song_title") or tags.get("title", "")).split()) or fallback
-    timeline = arrange(notes, course, actions == "auto", chart)
-    if not timeline:
-        raise ValueError("No complete combination fits the song. Reduce course.min_gap or try movement_set classic")
-    return audio, duration, timeline, title[:128], chart
+    return audio, duration, notes, title[:128], chart
 
 
 def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None):
@@ -98,7 +104,7 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
         diagnostics = {"algorithm": chart.get("version"), "bpm": chart.get("bpm"),
                        "tempo_confidence": chart.get("confidence"),
                        "beat_offset_ms": course["beat_offset_ms"],
-                       "sections": chart.get("sections", []), "notes": notes}
+                       "source_beats": chart["beats"], "sections": chart.get("sections", []), "notes": notes}
         output.with_suffix(".chart.json").write_text(
             json.dumps(diagnostics, ensure_ascii=False, indent=2) + "\n")
     shortest = min((b["time"] - a["time"] for a, b in zip(notes, notes[1:])), default=None)
@@ -141,7 +147,7 @@ if __name__ == "__main__":
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
-    parser.add_argument("--scene", choices=SCENES, help="Override the course's arena background")
+    parser.add_argument("--scene", type=fixed_scene, choices=SCENES, help="Choose one arena for the entire song")
     args = parser.parse_args()
     try:
         overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,

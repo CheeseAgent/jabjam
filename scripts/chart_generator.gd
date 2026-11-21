@@ -1,7 +1,8 @@
 extends RefCounted
 ## Deterministic local heuristic, not semantic mood or variable-tempo recognition.
-const VERSION := "energy-grid-v2"
-const STEP := 0.02
+const VERSION := "onset-grid-v3"
+const STEP := 0.01
+const SECTION_FRAMES := 400  # Four seconds at the analysis hop.
 const SAMPLE_RATE := 8000.0
 const ACTIONS := ["left_jab", "right_jab", "left_hook", "right_hook"]
 
@@ -12,61 +13,138 @@ static func analyze(stream: AudioStream, progress: Callable = Callable()) -> Dic
 		return {"error": "This audio could not be decoded."}
 	playback.start()
 	var energy := PackedFloat32Array()
+	var bass_energy := PackedFloat32Array()
+	var lowpass := Vector2.ZERO
+	var bass_alpha := 1.0 - exp(-TAU * 160.0 / SAMPLE_RATE)
 	var frames := int(SAMPLE_RATE * STEP)
 	var scale := float(AudioServer.get_mix_rate()) / SAMPLE_RATE
 	var count := int(ceil(duration / STEP))
 	energy.resize(count)
+	bass_energy.resize(count)
 	for i in range(count):
 		if i % 50 == 0 and progress.is_valid() and not progress.call(float(i) / count):
 			playback.stop()
 			return {"error": "Cancelled."}
 		var samples := playback.mix_audio(scale, frames)
 		var sum := 0.0
+		var bass_sum := 0.0
 		for sample in samples:
-			sum += (sample.x * sample.x + sample.y * sample.y) * 0.5
+			sum += sample.length_squared() * 0.5
+			lowpass += (sample - lowpass) * bass_alpha
+			bass_sum += lowpass.length_squared() * 0.5
 		energy[i] = sqrt(sum / maxi(1, samples.size()))
+		bass_energy[i] = sqrt(bass_sum / maxi(1, samples.size()))
 	playback.stop()
 	var peak := 0.0
 	var novelty := PackedFloat32Array()
 	novelty.resize(energy.size())
 	for i in range(energy.size()):
 		peak = maxf(peak, energy[i])
-		novelty[i] = maxf(0.0, energy[i] - energy[maxi(0, i - 1)])
+		var prev := maxi(0, i - 1)
+		novelty[i] = maxf(0.0, energy[i] - energy[prev]) + maxf(0.0, bass_energy[i] - bass_energy[prev])
 	if peak < 0.001:
 		return {"error": "This file is silent or too quiet to arrange."}
-	# Autocorrelation over up to two minutes. Prefer the shorter period on ties.
-	var best_lag := 25
-	var confidence := 0.0
-	var limit := mini(novelty.size(), 6000)
-	for lag in range(17, 51):
-		var dot := 0.0
-		var a := 0.0
-		var b := 0.0
-		for i in range(lag, limit):
-			dot += novelty[i] * novelty[i - lag]
-			a += novelty[i] * novelty[i]
-			b += novelty[i - lag] * novelty[i - lag]
-		var correlation := dot / maxf(0.00000001, sqrt(a * b))
-		if correlation > confidence + 0.015:
-			confidence = correlation
-			best_lag = lag
-	return {"energy": energy, "novelty": novelty, "peak": peak,
-		"estimated_bpm": 60.0 / (best_lag * STEP), "confidence": confidence}
+	var analysis := _estimate_tempo(novelty)
+	analysis.merge({"energy": energy, "novelty": novelty, "peak": peak})
+	return analysis
 
-static func _align_to_onset(time: float, novelty: PackedFloat32Array, peak: float, period: float) -> float:
-	# Refine an already estimated beat on a nearby transient without chasing every hi-hat.
-	var radius := minf(0.065, period * 0.13)
-	var center := int(round(time / STEP))
-	var reach := maxi(1, int(ceil(radius / STEP)))
-	var strongest := -1.0
-	var winner := center
-	for i in range(maxi(1, center - reach), mini(novelty.size() - 1, center + reach + 1)):
-		if novelty[i] > strongest:
-			strongest = novelty[i]
-			winner = i
-	if peak > 0.0 and strongest > peak * 0.14:
-		return lerpf(time, winner * STEP, 0.75)
-	return time
+static func _estimate_tempo(novelty: PackedFloat32Array) -> Dictionary:
+	# A single quantized lag drifts across a song. Measure the same period across
+	# progressively longer groups of beats, with sub-bin peak interpolation.
+	var limit := mini(novelty.size(), int(120.0 / STEP))
+	var shortest := floori(60.0 / (180.0 * STEP))
+	var longest := ceili(60.0 / (60.0 * STEP))
+	var lag := 0.5 / STEP
+	var confidence := 0.0
+	for candidate in range(shortest, longest + 1):
+		var score := _correlation(novelty, candidate, limit)
+		if score > confidence + 0.015:
+			confidence = score
+			lag = candidate
+	var uncertainty := 1.25
+	for span in [4, 8, 16, 32]:
+		var center := roundi(lag * span)
+		if center > limit / 3.0:
+			break
+		var radius := ceili(uncertainty * span)
+		var best := center
+		var peak_score := 0.0
+		for candidate in range(center - radius, center + radius + 1):
+			var score := _correlation(novelty, candidate, limit)
+			if score > peak_score:
+				peak_score = score
+				best = candidate
+		if peak_score < confidence * 0.4:
+			continue
+		var left := _correlation(novelty, best - 1, limit)
+		var right := _correlation(novelty, best + 1, limit)
+		var curvature := 2.0 * peak_score - left - right
+		var fraction := clampf(0.5 * (right - left) / curvature, -0.5, 0.5) if curvature > 0.00001 else 0.0
+		lag = (best + fraction) / float(span)
+		uncertainty = 1.5 / float(span)
+	return {"estimated_bpm": clampf(60.0 / (lag * STEP), 60.0, 180.0), "confidence": confidence}
+
+static func _correlation(novelty: PackedFloat32Array, lag: int, limit: int) -> float:
+	var dot := 0.0
+	var a := 0.0
+	var b := 0.0
+	for i in range(lag, limit):
+		var x := novelty[i]
+		var y := novelty[i - lag]
+		dot += x * y
+		a += x * x
+		b += y * y
+	return dot / maxf(0.00000001, sqrt(a * b))
+
+static func _beat_grid(novelty: PackedFloat32Array, period: float, duration: float) -> Array[float]:
+	var bins := roundi(period / STEP)
+	var histogram := PackedFloat32Array()
+	histogram.resize(bins)
+	for i in range(novelty.size()):
+		var pos := fposmod(i * STEP, period) * bins / period
+		var slot := floori(pos)
+		var fraction := pos - slot
+		histogram[slot % bins] += novelty[i] * (1.0 - fraction)
+		histogram[(slot + 1) % bins] += novelty[i] * fraction
+	var best_bin := 0
+	var best_score := -1.0
+	for i in range(bins):
+		var score := 2.0 * histogram[i] + histogram[posmod(i-1, bins)] + histogram[(i+1) % bins]
+		if score > best_score:
+			best_score = score
+			best_bin = i
+	var phase := best_bin * period / bins
+	var beats: Array[float] = []
+	for n in range(ceili(duration / period) + 1):
+		var center := phase + n * period
+		var time := snappedf(maxf(0.0, center + _local_phase(center, period, novelty)), 0.001)
+		if time >= duration:
+			break
+		beats.append(time)
+	return beats
+
+static func _local_phase(center: float, period: float, novelty: PackedFloat32Array) -> float:
+	# Require evidence across surrounding beats before shifting the hit. A lone
+	# syncopated syllable or hi-hat should not pull a combination off its pulse.
+	var reach := roundi(minf(0.10, 0.20 * period) / STEP)
+	var best := 0
+	var high := 0.0
+	var total := 0.0
+	for offset in range(-reach, reach + 1):
+		var score := 0.0
+		for neighbor in range(-4, 5):
+			var i := roundi((center + neighbor * period) / STEP) + offset
+			if i >= 1 and i + 1 < novelty.size():
+				score += (5 - absi(neighbor)) * (novelty[i-1] + 2.0 * novelty[i] + novelty[i+1])
+		# Prefer the global phase on weak evidence or near-ties.
+		score *= 1.0 - 0.20 * absf(float(offset) / reach)
+		total += score
+		if score > high:
+			high = score
+			best = offset
+	if high <= 0.0001 or high < 1.35 * total / (2 * reach + 1):
+		return 0.0
+	return best * STEP
 
 
 static func generate(analysis: Dictionary, song_id: String, duration: float,
@@ -79,29 +157,17 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 	var period := 60.0 / bpm
 	var energy: PackedFloat32Array = analysis.energy
 	var novelty: PackedFloat32Array = analysis.novelty
-	var bins := maxi(1, int(round(period / STEP)))
-	var phase_scores := PackedFloat32Array()
-	phase_scores.resize(bins)
-	for i in range(novelty.size()):
-		phase_scores[mini(bins - 1, int(fposmod(i * STEP, period) / period * bins))] += novelty[i]
-	var phase_index := 0
-	for i in range(bins):
-		if phase_scores[i] > phase_scores[phase_index]:
-			phase_index = i
-	var phase := float(phase_index) / bins * period
-	var onset_peak := 0.0
-	for value in novelty:
-		onset_peak = maxf(onset_peak, value)
+	var beats := _beat_grid(novelty, period, duration)
 	var minimum_gap := 1.1 if difficulty == "easy" else 0.45
 	var notes: Array[Dictionary] = []
 	var sections: Array[Dictionary] = []
 	# Describe the dynamic envelope: a four-second section is NOT a verse/chorus classifier.
 	var maximum_region := 0.0001
-	for begin in range(0, energy.size(), 200):
+	for begin in range(0, energy.size(), SECTION_FRAMES):
 		var total := 0.0
-		for i in range(begin, mini(begin + 200, energy.size())):
+		for i in range(begin, mini(begin + SECTION_FRAMES, energy.size())):
 			total += energy[i]
-		var average := total / mini(200, energy.size() - begin)
+		var average := total / mini(SECTION_FRAMES, energy.size() - begin)
 		sections.append({"time": begin * STEP, "energy": average})
 		maximum_region = maxf(maximum_region, average)
 	# Avoid a hard four-second step at each boundary.
@@ -110,14 +176,12 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 		var current: float = sections[i].energy
 		var after: float = sections[mini(sections.size() - 1, i + 1)].energy
 		sections[i]["intensity"] = (before + current * 2.0 + after) / (4.0 * maximum_region)
-	var beat := 0
-	while phase + beat * period < duration - 0.5:
-		var grid_time := phase + beat * period
+	for beat in range(beats.size()):
+		var time := beats[beat]
 		var beat_in_phrase := beat % 8
-		beat += 1
-		if grid_time < 3.0:
+		if time < 3.0 or time >= duration - 0.5:
 			continue
-		var region: Dictionary = sections[mini(int(grid_time / 4.0), sections.size() - 1)]
+		var region: Dictionary = sections[mini(int(time / 4.0), sections.size() - 1)]
 		var level: float = region.intensity
 		if level < 0.09:
 			continue
@@ -135,12 +199,11 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 			continue
 		# Avoid plotting a note over actual silence even inside a loud section.
 		var local_peak := 0.0
-		var frame := int(grid_time / STEP)
-		for i in range(maxi(0, frame - 8), mini(frame + 9, energy.size())):
+		var frame := int(time / STEP)
+		for i in range(maxi(0, frame - 16), mini(frame + 17, energy.size())):
 			local_peak = maxf(local_peak, energy[i])
 		if local_peak < maxf(0.001, float(analysis.peak) * 0.025):
 			continue
-		var time := _align_to_onset(grid_time, novelty, onset_peak, period)
 		if not notes.is_empty():
 			var previous: Dictionary = notes.back()
 			var recovery := minimum_gap
@@ -158,8 +221,8 @@ static func generate(analysis: Dictionary, song_id: String, duration: float,
 		return {"error": "Not enough rhythmic audio. Try a longer or more percussive song."}
 	var chart_id := (song_id + "|" + VERSION + "|" + difficulty + "|" + str(bpm_override)).sha256_text()
 	return {"id": chart_id, "song_id": song_id, "version": VERSION, "difficulty": difficulty,
-		"bpm_override": bpm_override, "bpm": snappedf(bpm, 0.1), "confidence": analysis.confidence,
-		"duration": duration, "notes": notes, "sections": sections}
+		"bpm_override": bpm_override, "bpm": snappedf(bpm, 0.001), "confidence": analysis.confidence,
+		"duration": duration, "beats": beats, "notes": notes, "sections": sections}
 
 
 static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
@@ -175,6 +238,17 @@ static func valid(chart: Dictionary, song_id: String, duration: float) -> bool:
 		return false
 	if chart.get("difficulty") not in ["easy", "normal"]:
 		return false
+	if chart.get("beats") is not Array or chart.beats.is_empty():
+		return false
+	if absf(chart.beats.size() - duration * float(chart.bpm) / 60.0) > 2:
+		return false
+	var last_beat := -1.0
+	for beat in chart.beats:
+		if typeof(beat) not in [TYPE_INT, TYPE_FLOAT] or not is_finite(float(beat)):
+			return false
+		if float(beat) < 0 or float(beat) >= duration or float(beat) <= last_beat:
+			return false
+		last_beat = beat
 	var previous := -10.0
 	for note in chart.notes:
 		if note is not Dictionary or note.get("action") not in ACTIONS:

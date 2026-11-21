@@ -1,4 +1,7 @@
 """Video-only timing and arrangement. All times are seconds on the source song."""
+from bisect import bisect_left
+from math import atan2, ceil, cos, pi, sin
+
 from movements import MOVEMENTS
 
 MIN_GAP = {"easy": 1.1, "normal": 0.45}
@@ -106,50 +109,43 @@ def _percentile(values, fraction):
     return ordered[round((len(ordered) - 1) * fraction)]
 
 
-def _combo_cues(template, start_time, start_hand, period, course):
-    """Place the entire combo on beats, using actual action recovery times."""
-    from math import ceil
+def _beat_times(notes, chart):
+    if "beats" in chart:
+        return chart["beats"]
+    # Older analysis files only stored sparse cues and a global tempo.
+    period = 60 / chart["bpm"]
+    angles = [2 * pi * (note["time"] % period) / period for note in notes[:32]]
+    phase = atan2(sum(sin(a) for a in angles), sum(cos(a) for a in angles)) % (2*pi) * period / (2*pi)
+    duration = chart.get("duration", notes[-1]["time"] + period)
+    return [round(phase + i * period, 3) for i in range(ceil((duration-phase) / period))]
+
+
+def _combo_cues(template, beats, start, start_hand, course):
+    """Choose whole measured beats and leave time to recover after each punch."""
     key, label, kinds = template
     built = []
-    beat_offset = 0
+    slot = start
     for index, kind in enumerate(kinds):
         side = "left" if (start_hand + index) % 2 == 0 else "right"
         action = f"{side}_{kind}"
         if built:
-            last = MOVEMENTS[built[-1]["action"]]
-            gap = required_gap(last, MOVEMENTS[action], course)
-            beat_offset += max(1, ceil((gap - 1e-9) / period))
-            # The editable course stores milliseconds. Check the rounded cue too.
-            if round(start_time + beat_offset * period, 3) - built[-1]["time"] + 1e-9 < gap:
-                beat_offset += 1
-        built.append({"time": round(start_time + beat_offset * period, 3),
-                      "action": action, "combo_name": label,
-                      "combo_id": key, "combo_step": index + 1,
-                      "combo_total": len(kinds)})
-    return built, beat_offset
+            last = built[-1]
+            gap = required_gap(MOVEMENTS[last["action"]], MOVEMENTS[action], course)
+            slot = bisect_left(beats, last["time"] + gap - 1e-9, lo=slot + 1)
+            if slot == len(beats):
+                return [], slot
+        built.append({"time": beats[slot], "action": action, "combo_name": label,
+                      "combo_id": key, "combo_step": index + 1, "combo_total": len(kinds)})
+    return built, slot
 
 
 def padwork_round(notes, course, chart):
-    """Select a short repertoire of repeated, mirrored mitt-work combinations.
-
-    A template repeats twice, first lead-left then lead-right, before rotating.
-    Music energy controls which repertoire is used. Template changes happen
-    between phrases, never inside a phrase. Tempo is still a global estimate,
-    not a verified downbeat tracker.
-    """
-    from math import atan2, ceil, cos, pi, sin
-
+    """Repeat complete mirrored combinations on the song's measured beat grid."""
     if not notes or not chart:
         return []
     bpm = chart.get("bpm", 0)
     if not isinstance(bpm, (int, float)) or not 60 <= bpm <= 180:
         raise ValueError("Padwork requires a valid auto-chart BPM")
-    period = 60.0 / bpm
-
-    angles = [2 * pi * (note["time"] % period) / period for note in notes[:32]]
-    phase = (atan2(sum(sin(a) for a in angles), sum(cos(a) for a in angles))
-             % (2 * pi)) / (2 * pi) * period
-
     sections = chart.get("sections") or []
     if not sections:
         return pace_notes(notes, course, True)
@@ -157,14 +153,15 @@ def padwork_round(notes, course, chart):
     high_cut = max(0.58, _percentile([v for v in levels if v >= 0.09], 0.60))
     mid_cut = 0.28
 
-    duration = chart.get("duration", notes[-1]["time"] + period)
-    beat = max(0, ceil((3.0 - phase) / (8 * period))) * 8
+    beats = _beat_times(notes, chart)
+    duration = chart.get("duration", notes[-1]["time"] + 60 / bpm)
+    beat = ((bisect_left(beats, 3.0) + 7) // 8) * 8
     result = []
     phrase_no = 0
     repetitions = {"warmup": 0, "steady": 0, "peak": 0}
 
-    while phase + beat * period < duration - 0.4:
-        start = phase + beat * period
+    while beat < len(beats) and beats[beat] < duration - 0.4:
+        start = beats[beat]
         section_index = min(len(levels) - 1, max(0, int(start / 4.0)))
         level = levels[section_index]
         band = ("peak" if level >= high_cut else
@@ -180,10 +177,12 @@ def padwork_round(notes, course, chart):
         library = PADWORK_COMBOS[band]
         template = library[(seen // 2) % len(library)]
         # The same technique is drilled from both sides before changing pattern.
-        candidate, end_beat = _combo_cues(template, start, seen % 2, period, course)
+        candidate, end_beat = _combo_cues(template, beats, beat, seen % 2, course)
+        if not candidate:
+            break
         recovery = max(course["min_gap"], RECOVERY_GAP[course["difficulty"]])
-        recovery_beats = max(1, ceil((recovery - 1e-9) / period))
-        phrase_beats = max(8, 4 * ceil((end_beat + recovery_beats) / 4))
+        next_slot = bisect_left(beats, candidate[-1]["time"] + recovery - 1e-9, lo=end_beat + 1)
+        phrase_beats = max(8, 4 * ((next_slot - beat + 3) // 4))
 
         # Reject the *entire* exercise if it would clip at the end or collide
         # with a preceding exercise; never turn a five-hit combo into four.
