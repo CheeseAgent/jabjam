@@ -176,6 +176,54 @@ class VideoPacing(unittest.TestCase):
         self.assertEqual([n.get("combo_no") for n in calibrated_notes(notes, -200, 20)], [2, 2, 3, 3, None])
         self.assertEqual([n["combo_no"] for n in calibrated_notes(notes, 200, 20)], [1, 1, 2, 2])
 
+    def test_chorus_marks_reserve_mirrored_groups_on_the_song_clock(self):
+        from choreography import CHORUS_FINALES
+        starts = [8.12, 18.34, 28.17]
+        beats = [round(i * .491 + .07, 3) for i in range(90)]
+        seed = [{"time": 4.0, "action": "left_jab"}]
+        chart = {"bpm": 122, "duration": 44, "beats": beats, "sections": [{"intensity": .95}] * 11}
+        for base, finale in CHORUS_FINALES.items():
+            for lyric_options in ({}, {"lyric_starts": [4, 7.8, 8.12, 13, 18.34, 23, 28.17, 35, 40]}):
+                for offset in (-173.5, 249.5):
+                    with self.subTest(base=base, offset=offset, lyrics=bool(lyric_options)):
+                        course = dict(self.course, min_gap=.491, movement_set="padwork", chorus_starts=starts,
+                                      chorus_combo=base, beat_offset_ms=offset, **lyric_options)
+                        saved = calibrated_notes(arrange(seed, course, True, chart), offset, 44)
+                        self.assertEqual(arrange(saved, course, False), saved)
+                        leads = [n for n in saved if n["combo_step"] == 1 and "chorus_cue" in n]
+                        self.assertEqual([n["time"] for n in leads], starts)
+                        self.assertEqual([n["combo_id"] for n in leads], [base, base, finale])
+                        self.assertEqual([n["chorus_cue"] for n in leads], ["learn", "mirror", "extend"])
+                        groups = [[n for n in saved if n["combo_no"] == lead["combo_no"]] for lead in leads]
+                        moves = [[MOVEMENTS[n["action"]] for n in group] for group in groups]
+                        self.assertEqual([m.kind for m in moves[0]], [m.kind for m in moves[1]])
+                        self.assertTrue(all(a.side != b.side for a, b in zip(moves[0], moves[1])))
+                        self.assertEqual(moves[0], moves[2][:3])
+                        self.assertEqual([len(g) for g in groups], [3, 3, 5])
+                        grid = {round(t + offset/1000, 3) for t in beats}
+                        self.assertTrue(all(n["time"] in grid for group in groups for n in group[1:]))
+                        self.assertTrue(any("chorus_cue" not in n for n in saved))
+                        for lead in (n for n in saved if n["combo_step"] == 1):
+                            steps = [n["combo_step"] for n in saved if n["combo_no"] == lead["combo_no"]]
+                            self.assertEqual(steps, list(range(1, lead["combo_total"] + 1)))
+
+    def test_chorus_finale_falls_back_and_impossible_marks_name_the_time(self):
+        beats = [i / 2 for i in range(80)]
+        chart = {"beats": beats, "bpm": 120, "duration": 40, "sections": [{"intensity": .7}] * 10}
+        seed = [{"time": 4, "action": "left_jab"}]
+        course = dict(self.course, min_gap=.45, movement_set="padwork", lyric_phrasing="single",
+                      lyric_starts=[4, 12, 21, 23.3, 32])
+        for starts, expected in [([4], ["learn"]), ([4, 12], ["learn", "mirror"]),
+                                 ([4, 12, 21], ["learn", "mirror", "repeat"]),
+                                 ([4, 12, 21, 38], ["learn", "mirror", "repeat", "mirror"])]:
+            notes = arrange(seed, dict(course, chorus_starts=starts), True, chart)
+            leads = [n for n in notes if "chorus_cue" in n and n["combo_step"] == 1]
+            self.assertEqual([n["chorus_cue"] for n in leads], expected)
+            self.assertTrue(all(n["combo_total"] == 3 for n in leads))
+        for starts, message in [([2.9], "2.9s"), ([4, 5.5], "5.5s"), ([39], "39s"), ([43], "43s")]:
+            with self.subTest(starts=starts), self.assertRaisesRegex(ValueError, message):
+                arrange(seed, dict(course, chorus_starts=starts), True, chart)
+
     def test_padwork_mirrors_and_respects_fast_tempos(self):
         from choreography import required_gap
         course = {"difficulty": "normal", "min_gap": .45,
@@ -323,6 +371,27 @@ class CourseCLI(unittest.TestCase):
                 result = self.cli(source, *args, no_tools=True)
                 self.assertEqual(result.returncode, 2, result.stderr)
         self.assertEqual(list(self.work.iterdir()), [])
+
+    @unittest.skipUnless(shutil.which("godot") and shutil.which("ffprobe"), "automatic charts need Godot and ffprobe")
+    def test_chorus_course_freezes_labels_and_honors_difficulty_override(self):
+        source = ROOT / "courses/chorus-signature.json"
+        self.assertIn("3 chorus marks", self.cli(source, "--check", no_tools=True).stdout)
+        self.assertIn("chorus marks inactive", self.cli(source, "--check", "--difficulty", "easy", no_tools=True).stdout)
+        frozen = self.work / "frozen.json"
+        for level in ("easy", "normal", "hard", "expert"):
+            result = self.cli(source, "--write-course", frozen, "--difficulty", level, "--beat-offset-ms=-107")
+            self.assertEqual(result.returncode, 0, result.stderr)
+            settings, _, actions, _ = config(frozen)
+            leads = [n for n in actions if n.get("combo_step") == 1 and "chorus_cue" in n]
+            self.assertEqual([n["time"] for n in leads], [] if level == "easy" else [8, 18, 28])
+            self.assertEqual(arrange(actions, settings, False), actions)
+        data = json.loads(source.read_text())
+        for key, value in [("chorus_starts", [12, 8]), ("chorus_starts", [8, 8.00001]),
+                           ("chorus_starts", [True]), ("chorus_combo", "unknown")]:
+            bad = dict(data, course=dict(data["course"], **{key: value}))
+            frozen.write_text(json.dumps(bad))
+            with self.assertRaisesRegex(ValueError, key):
+                config(frozen)
 
     def test_lrc_discovery_inline_override_and_other_course_modes(self):
         audio = self.work / "song.ogg"

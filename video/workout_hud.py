@@ -6,6 +6,7 @@ import re
 
 from PIL import Image, ImageDraw
 
+from choreography import CHORUS_LABELS
 from lettering import font, text
 from lyrics import visible_text
 from movements import MOVEMENTS, LEFT
@@ -14,6 +15,11 @@ MINT = (117, 244, 213)
 GOLD = (255, 206, 128)
 WHITE = (247, 250, 252)
 INK = (17, 28, 43)
+
+
+def combo_caption(note):
+    cue = note.get("chorus_cue")
+    return f"{CHORUS_LABELS[cue]} · {note['combo_name']}" if cue else note["combo_name"]
 
 
 @lru_cache(maxsize=64)
@@ -95,7 +101,7 @@ class WorkoutHud:
         countdown = remaining <= 2
         if countdown:
             lead = "左起" if MOVEMENTS[note["action"]].side == LEFT else "右起"
-            title = f"下一组  ·  {lead}  ·  {note['combo_name']}"
+            title = f"下一组  ·  {lead}  ·  {combo_caption(note)}"
         else:
             title = "回架"
         width = min(630, round(font(24, True).getlength(title)) + (82 if countdown else 42))

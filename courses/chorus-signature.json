@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "course": {
+    "song_title": "小奶茶 · 副歌招牌组合",
+    "music": "builtin:demo",
+    "difficulty": "normal",
+    "movement_set": "padwork",
+    "chorus_starts": [8, 18, 28],
+    "lyric_lines": [
+      {"time": 4, "text": "跟着鼓点　热热身"},
+      {"time": 8, "text": "把星光装进拳套"},
+      {"time": 12, "text": "一拍一拍　往前走"},
+      {"time": 18, "text": "把星光装进拳套"},
+      {"time": 22, "text": "轻轻呼气　跟上节奏"},
+      {"time": 28, "text": "把星光装进拳套"},
+      {"time": 34, "text": "慢慢收势　抬头看星空"}
+    ]
+  },
+  "picture": {
+    "size": [960, 540],
+    "scene": "moon-carrots",
+    "coach": {"enabled": true, "renderer": "rig", "side": "right"},
+    "lyrics": "fade",
+    "combo_style": "ring"
+  }
+}

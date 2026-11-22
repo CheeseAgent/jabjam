@@ -3,7 +3,7 @@ import json
 import re
 from math import ceil
 
-from choreography import MIN_GAP, arrange, uses_padwork
+from choreography import CHORUS_FINALES, CHORUS_LABELS, DEFAULT_CHORUS, MIN_GAP, arrange, uses_padwork
 from movements import MOVEMENTS
 from coach_timeline import validate_coach_config
 from lyrics import LYRIC_STYLES, read_lrc_lines, visible_text
@@ -44,14 +44,17 @@ def read_actions(actions):
     last = -1
     for index, note in enumerate(actions):
         label = f"actions[{index}]"
-        fields(note, ("time", "action", "combo_id", "combo_no", "combo_name", "combo_step", "combo_total"), label)
+        fields(note, ("time", "action", "combo_id", "combo_no", "combo_name", "combo_step", "combo_total",
+                      "chorus_cue"), label)
         t = number(note.get("time"), 0, 600, f"{label}.time")
         action = note.get("action")
         if not isinstance(action, str) or action not in MOVEMENTS:
             raise ValueError(f"{label}.action: unknown ID {action!r}. Choose from {', '.join(MOVEMENTS)}")
         if t <= last:
             raise ValueError(f"{label}.time ({t:g}s) must be later than actions[{index-1}].time ({last:g}s)")
-        if any(key in note for key in ("combo_name", "combo_step", "combo_total")):
+        if "chorus_cue" in note and note["chorus_cue"] not in tuple(CHORUS_LABELS):
+            raise ValueError(f"{label}.chorus_cue must be one of " + ", ".join(CHORUS_LABELS))
+        if any(key in note for key in ("combo_name", "combo_step", "combo_total", "chorus_cue")):
             if not isinstance(note.get("combo_name"), str) or not note["combo_name"].strip():
                 raise ValueError(f"{label}.combo_name must name the combination")
             step, total = note.get("combo_step"), note.get("combo_total")
@@ -136,7 +139,12 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
         raise ValueError("version must be the integer 1")
     course = fields(data.get("course"), ("title", "song_title", "music", "difficulty", "bpm", "min_gap",
                                          "movement_set", "beat_offset_ms", "lyric_starts", "lyric_lines",
-                                         "lyric_phrasing", "display_beats"), "course")
+                                         "lyric_phrasing", "display_beats", "chorus_starts", "chorus_combo"), "course")
+    if "chorus_starts" in course:
+        course["chorus_starts"] = ordered_times(course["chorus_starts"], "course.chorus_starts")
+    if "chorus_combo" in course:
+        if "chorus_starts" not in course or course["chorus_combo"] not in tuple(CHORUS_FINALES):
+            raise ValueError("course.chorus_combo needs chorus_starts and must be one of " + ", ".join(CHORUS_FINALES))
     if course.get("lyric_phrasing", "paired") not in ("single", "paired"):
         raise ValueError("course.lyric_phrasing must be single or paired")
     if "display_beats" in course:
@@ -184,6 +192,11 @@ def check_course(path, **overrides):
     if actions == "auto":
         if uses_padwork(course) and "lyric_starts" in course:
             settings += f", {len(course['lyric_starts'])} timed lyric lines"
+        if "chorus_starts" in course:
+            if uses_padwork(course):
+                settings += f", {len(course['chorus_starts'])} chorus marks ({course.get('chorus_combo', DEFAULT_CHORUS)})"
+            else:
+                settings += ", chorus marks inactive for this difficulty or movement set"
         return f"OK ({settings}): automatic course. Audio duration and generated actions are checked during preparation."
     arrange(actions, course, automatic=False)
     return (f"OK ({settings}): {len(actions)} manual actions, spacing checked. "
