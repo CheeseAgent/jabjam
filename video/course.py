@@ -2,6 +2,7 @@
 import json
 import re
 from math import ceil
+from pathlib import Path
 
 from choreography import CHORUS_FINALES, CHORUS_LABELS, DEFAULT_CHORUS, MIN_GAP, arrange, uses_padwork
 from movements import MOVEMENTS
@@ -13,6 +14,8 @@ ART_HORIZONS = {"undersea-office": 338, "jellyfish-radio": 300, "panda-hotpot": 
 SCENES = ("neon", "classic", *ART_HORIZONS)
 COUNTER_SIDES = ("auto", "left", "right", "off")
 COUNTER_STYLES = ("minimal", "arcade", "ring")
+TITLE_STYLES = ("off", "cinema", "arcade", "vinyl")
+WAVE_STYLES = ("off", "ribbon", "bars", "orbit")
 
 
 def fixed_scene(value):
@@ -68,11 +71,13 @@ def read_actions(actions):
     return actions
 
 
-def read_picture(picture, scene, lyrics=None, combo_side=None, combo_style=None):
+def read_picture(picture, scene, lyrics=None, combo_side=None, combo_style=None,
+                 title_style=None, wave_style=None):
     fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach",
-                     "lyrics", "combo_side", "combo_style"), "picture")
+                     "lyrics", "combo_side", "combo_style", "title_style", "wave_style", "background_video"), "picture")
     for field, override, choices in (("lyrics", lyrics, LYRIC_STYLES), ("combo_side", combo_side, COUNTER_SIDES),
-                                     ("combo_style", combo_style, COUNTER_STYLES)):
+                                     ("combo_style", combo_style, COUNTER_STYLES), ("title_style", title_style, TITLE_STYLES),
+                                     ("wave_style", wave_style, WAVE_STYLES)):
         if override is not None:
             picture[field] = override
         if field in picture and picture[field] not in choices:
@@ -132,7 +137,7 @@ def load_lyrics(course, music, actions, show):
 
 
 def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
-           lyrics=None, combo_side=None, combo_style=None):
+           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None):
     """Return effective course settings, resolved music source, actions, and picture."""
     data = fields(json.loads(path.read_text(encoding="utf-8")), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
@@ -177,7 +182,18 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
     offset = course.get("beat_offset_ms", 0) if beat_offset_ms is None else beat_offset_ms
     course["beat_offset_ms"] = number(offset, -250, 250, "course.beat_offset_ms")
     actions = read_actions(data.get("actions", "auto"))
-    picture = read_picture(data.get("picture", {}), scene, lyrics, combo_side, combo_style)
+    picture = read_picture(data.get("picture", {}), scene, lyrics, combo_side, combo_style, title_style, wave_style)
+    if background_video is not None:
+        picture["background_video"] = background_video
+    clip = picture.get("background_video", "off")
+    if clip != "off":
+        if not isinstance(clip, str) or not clip.strip():
+            raise ValueError("picture.background_video must be off or a local video path")
+        directory = path.parent if background_video is None else Path.cwd()
+        source = (directory / clip).resolve()
+        if source.suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm") or not source.is_file():
+            raise ValueError(f"picture.background_video needs a local MP4, MOV, MKV or WebM file: {source}")
+        picture["background_video"] = str(source)
     load_lyrics(course, music, actions, picture.get("lyrics", "off") != "off")
     return course, music, actions, picture
 
@@ -186,6 +202,10 @@ def check_course(path, **overrides):
     """Check the config and authored spacing without analyzing audio or rendering frames."""
     course, _, actions, picture = config(path, **overrides)
     settings = f"{course['difficulty']}, min_gap {course['min_gap']:g}s"
+    for field in ("title_style", "wave_style", "background_video"):
+        if picture.get(field, "off") != "off":
+            value = Path(picture[field]).name if field == "background_video" else picture[field]
+            settings += f", {field}={value}"
     if picture.get("lyrics", "off") != "off":
         count = sum(bool(visible_text(row["text"])) for row in course.get("lyric_lines", ()))
         settings += f", {count} visible lyric lines" if count else ", no lyric text to display"

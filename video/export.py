@@ -1,5 +1,7 @@
 """Check a local JabJam course, write its editable timeline, or render an MP4. Linux, Python 3.9+."""
 import argparse
+from contextlib import closing, nullcontext
+from itertools import repeat
 import json
 import math
 import os
@@ -9,7 +11,7 @@ import sys
 import tempfile
 import time
 
-from course import COUNTER_SIDES, COUNTER_STYLES, SCENES, check_course, config, fixed_scene, number
+from course import COUNTER_SIDES, COUNTER_STYLES, SCENES, TITLE_STYLES, WAVE_STYLES, check_course, config, fixed_scene, number
 from choreography import MIN_GAP, arrange, uses_padwork
 from lyrics import LYRIC_STYLES, visible_text
 
@@ -80,20 +82,26 @@ def display_beats(course, chart, duration):
 
 
 def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
-           lyrics=None, combo_side=None, combo_style=None):
+           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None):
     from arena import Arena
+    from audio_wave import song_envelope
+    from background_video import video_frames
 
     course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms, scene,
-                                             lyrics, combo_side, combo_style)
+                                             lyrics, combo_side, combo_style, title_style, wave_style, background_video)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
+    clip = picture.get("background_video", "off")
+    if clip != "off" and output.exists() and output.samefile(clip):
+        raise ValueError("Output must be different from the background video")
     output.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     with tempfile.TemporaryDirectory(dir=output.parent) as folder:
         tmp = Path(folder).resolve()
         audio, duration, notes, title, chart = prepare(course, music, actions, tmp)
+        envelope = song_envelope(audio, duration) if picture.get("wave_style", "off") != "off" else b""
         arena = Arena(title, picture, notes, duration, beats=display_beats(course, chart, duration),
-                      bpm=course.get("bpm", 120), lyric_lines=course.get("lyric_lines", ()))
+                      bpm=course.get("bpm", 120), lyric_lines=course.get("lyric_lines", ()), envelope=envelope)
         size = picture.get("size", [1280, 720])
         fps = picture.get("fps", 24)
         temp_mp4 = tmp / "render.mp4"
@@ -103,10 +111,12 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
                "-c:v", "libx264", "-threads:v", "1", "-preset", "veryfast", "-tune", "zerolatency",
                "-crf", "21", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k",
                "-metadata", f"title={title}", "-t", str(duration), "-movflags", "+faststart", str(temp_mp4)]
-        with subprocess.Popen(cmd, stdin=subprocess.PIPE) as encoder:
+        frames = closing(video_frames(clip, fps)) if clip != "off" else nullcontext(repeat(None))
+        with frames as backdrops, subprocess.Popen(cmd, stdin=subprocess.PIPE) as encoder:
             try:
                 for frame in range(math.ceil(duration * fps)):
-                    encoder.stdin.write(arena.frame(frame / fps).tobytes())
+                    image = arena.frame(frame / fps, background_frame=next(backdrops))
+                    encoder.stdin.write(image.tobytes())
                 encoder.stdin.close()
                 if encoder.wait() != 0:
                     raise RuntimeError("FFmpeg failed to encode video")
@@ -152,6 +162,8 @@ def write_course(path, output, **overrides):
         course["song_title"] = title
         if music != "builtin:demo":
             course["music"] = os.path.relpath(music, output.parent.resolve())
+        if picture.get("background_video", "off") != "off":
+            picture["background_video"] = os.path.relpath(picture["background_video"], output.parent.resolve())
         editable = {"version": 1, "course": course, "actions": notes, "picture": picture}
         ready = tmp / "course.json"
         ready.write_text(json.dumps(editable, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -167,7 +179,7 @@ if __name__ == "__main__":
     mode.add_argument("--write-course", type=Path, metavar="EDITED.json",
                       help="Write the final actions to a separate course JSON for editing")
     mode.add_argument("--check", action="store_true", help="Check course settings and authored action spacing")
-    parser.add_argument("--song-title", help="Song name shown in the header and MP4 metadata")
+    parser.add_argument("--song-title", help="Song name used in the header, opening title and MP4 metadata")
     parser.add_argument("--difficulty", choices=MIN_GAP, help="Override the course difficulty")
     parser.add_argument("--min-gap", type=float, help="Minimum seconds between actions")
     parser.add_argument("--beat-offset-ms", type=float, help="Correct cue time by -250 to +250 milliseconds")
@@ -175,11 +187,15 @@ if __name__ == "__main__":
     parser.add_argument("--lyrics", choices=LYRIC_STYLES, help="On-screen timed lyrics, off by default")
     parser.add_argument("--combo-side", choices=COUNTER_SIDES, help="Counter position; auto is opposite the coach")
     parser.add_argument("--combo-style", choices=COUNTER_STYLES, help="Visual style of the on-screen streak")
+    parser.add_argument("--title-style", choices=TITLE_STYLES, help="Opening song title for the first three seconds")
+    parser.add_argument("--wave-style", choices=WAVE_STYLES, help="Stage waveform driven by the song audio")
+    parser.add_argument("--background-video", metavar="PATH|off", help="Local video backdrop (CLI paths use the current directory)")
     args = parser.parse_args()
     try:
         overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,
                          beat_offset_ms=args.beat_offset_ms, scene=args.scene, lyrics=args.lyrics,
-                         combo_side=args.combo_side, combo_style=args.combo_style)
+                         combo_side=args.combo_side, combo_style=args.combo_style, title_style=args.title_style,
+                         wave_style=args.wave_style, background_video=args.background_video)
         if args.check:
             print(check_course(args.config, **overrides))
         elif args.write_course is not None:
