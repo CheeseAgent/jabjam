@@ -41,6 +41,19 @@ on:
         type: choice
         options: [course, minimal, arcade, ring]
         default: course
+      title_style:
+        description: 片头歌名（电影、街机、黑胶）
+        type: choice
+        options: [course, 'off', cinema, arcade, vinyl]
+        default: course
+      wave_style:
+        description: 音波（流光波纹、镜面跳柱、声波光环）
+        type: choice
+        options: [course, 'off', ribbon, bars, orbit]
+        default: course
+      background_video:
+        description: 背景视频（仓库内路径，off 关闭，留空沿用课程）
+        type: string
       verify_samples:
         description: 额外生成验收短片并跑三分钟压力测试
         type: boolean
@@ -93,6 +106,9 @@ jobs:
       LYRICS: ${{ inputs.lyrics || 'course' }}
       COMBO_SIDE: ${{ inputs.combo_side || 'course' }}
       COMBO_STYLE: ${{ inputs.combo_style || 'course' }}
+      TITLE_STYLE: ${{ inputs.title_style || 'course' }}
+      WAVE_STYLE: ${{ inputs.wave_style || 'course' }}
+      BACKGROUND_VIDEO: ${{ inputs.background_video }}
       VERIFY_SAMPLES: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_samples }}
       ARTIFACT_NAME: jabjam-follow-along-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
@@ -118,6 +134,9 @@ jobs:
           if [[ "$LYRICS" != course ]]; then options+=("--lyrics=$LYRICS"); fi
           if [[ "$COMBO_SIDE" != course ]]; then options+=("--combo-side=$COMBO_SIDE"); fi
           if [[ "$COMBO_STYLE" != course ]]; then options+=("--combo-style=$COMBO_STYLE"); fi
+          if [[ "$TITLE_STYLE" != course ]]; then options+=("--title-style=$TITLE_STYLE"); fi
+          if [[ "$WAVE_STYLE" != course ]]; then options+=("--wave-style=$WAVE_STYLE"); fi
+          if [[ -n "$BACKGROUND_VIDEO" ]]; then options+=("--background-video=$BACKGROUND_VIDEO"); fi
 
           echo "::group::Course settings"
           offline python3 -S video/export.py "./$COURSE" --check "${options[@]}"

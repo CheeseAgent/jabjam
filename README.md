@@ -32,11 +32,28 @@
 | 熊猫火锅夜市 | 熊猫掌勺，鸳鸯锅和灯笼亮在左边 | `panda-hotpot` |
 | 月球萝卜基地 | 机器人把萝卜装车，远处停着萝卜火箭 | `moon-carrots` |
 
-每首歌在渲染前选定一个场景，全程使用同一张背景。小奶茶示例课程默认用熊猫火锅夜市。把课程 JSON 的 `picture.scene` 设为表中任意选项，或在导出命令里用 `--scene` 指定本次场景。也可选 `neon` 或 `classic`。
+每首歌在渲染前选定背景。小奶茶示例课程默认用熊猫火锅夜市。把课程 JSON 的 `picture.scene` 设为表中任意选项，或在导出命令里用 `--scene` 指定本次场景。也可选 `neon` 或 `classic`。
 
 ```sh
 python3 video/export.py courses/milktea-tour.json build/jellyfish-round.mp4 --scene jellyfish-radio
 ```
+
+## 片头歌名、音乐音波和视频背景
+
+三项默认关闭，可在 Actions 表单、课程 JSON 或命令行里独立选择。下表两行的风格可任意搭配。
+
+| 效果 | 预设 |
+| --- | --- |
+| 片头歌名 `--title-style` | `cinema` 宽银幕金线淡入，`arcade` 街机斜牌滑入，`vinyl` 黑胶唱片封套 |
+| 音乐音波 `--wave-style` | `ribbon` 双侧流光波纹，`bars` 镜面跳柱，`orbit` 一对声波光环 |
+
+例如，给小奶茶的跟练片加一个黑胶片头，让音波随原曲起伏。
+
+```sh
+python3 video/export.py courses/milktea-tour.json build/vinyl.mp4 --title-style vinyl --wave-style ribbon
+```
+
+有自己的视频时，追加 `--background-video "素材/夜景.mp4"`。短片循环，长片播到歌曲结束，成片使用课程的音乐。三个选项都可以单独传 `off`。[课程字段与路径写法](docs/video-export.md#片头音波与视频背景)
 
 ## 自动谱怎样踩拍
 

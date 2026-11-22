@@ -17,6 +17,7 @@ python3 -S video/export.py courses/eight-moves.json --check
 for test in \
   tests/test_video_pacing.py \
   tests/test_arena_scenes.py \
+  tests/test_music_visuals.py \
   tests/test_coach_avatar.py \
   tests/test_cutout_rig.py
 do

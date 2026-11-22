@@ -6,11 +6,13 @@ from random import Random
 from PIL import Image, ImageColor, ImageDraw, ImageOps
 
 from course import ART_HORIZONS, fixed_scene
-
+from audio_wave import draw_wave
+from background_video import STAGE_SIZE, STAGE_TOP
 from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
 from coach_avatar import CoachLayer
 from lettering import font, text
+from opening_title import OpeningTitle, TITLE_SECONDS
 from workout_hud import WorkoutHud, combo_caption
 
 INK = (11, 21, 36)
@@ -27,7 +29,7 @@ def blend(a, b, p):
 
 
 class Arena:
-    def __init__(self, title, picture, notes, duration, *, beats=(), bpm=120, lyric_lines=()):
+    def __init__(self, title, picture, notes, duration, *, beats=(), bpm=120, lyric_lines=(), envelope=b""):
         # Snap the presentation only. The chart and audio keep their source timestamps.
         fps = picture.get("fps", 24)
         last_frame = ceil(duration * fps) - 1
@@ -37,8 +39,15 @@ class Arena:
         self.lead = picture.get("approach_seconds", 2)
         self.size = tuple(picture.get("size", [1280, 720]))
         self.scene = fixed_scene(picture.get("scene", "neon"))
-        self.neon = self.scene == "neon"
-        self.horizon = ART_HORIZONS.get(self.scene, HORIZON)
+        self.has_video = picture.get("background_video", "off") != "off"
+        self.neon = self.scene == "neon" and not self.has_video
+        self.horizon = HORIZON if self.has_video else ART_HORIZONS.get(self.scene, HORIZON)
+        title_style = picture.get("title_style", "off")
+        self.opening = OpeningTitle(title, title_style) if title_style != "off" else None
+        self.wave_style = picture.get("wave_style", "off")
+        self.envelope = envelope
+        if self.wave_style != "off" and not envelope:
+            raise ValueError("A song envelope is required for the waveform")
         self.colors = [ImageColor.getrgb(picture.get("left_color", "#63edce")),
                        ImageColor.getrgb(picture.get("right_color", "#ff916d"))]
         self.halo = Image.new("L", (96, 96))
@@ -124,16 +133,20 @@ class Arena:
 
     def illustrated_stage(self, im):
         with Image.open(Path(__file__).resolve().parents[1] / "assets/arenas" / (self.scene + ".jpg")) as source:
-            stage = ImageOps.fit(source, (1280, 555), method=Image.Resampling.LANCZOS)
-        im.paste(stage, (0, 77))
-        # Shade just the score row and the two lanes; the painted floor stays visible.
+            stage = ImageOps.fit(source, STAGE_SIZE, method=Image.Resampling.LANCZOS)
+        im.paste(stage, (0, STAGE_TOP))
+        self.stage_guides(im)
+
+    def stage_guides(self, im):
+        # Keep the score and two lanes readable over detailed or moving artwork.
         overlay = ImageDraw.Draw(im, "RGBA")
+        shade = 65 if self.has_video else 0
         for y in range(77, 157):
-            alpha = round(155 * (1 - (y - 77) / 80))
+            alpha = shade + round(155 * (1 - (y - 77) / 80))
             overlay.line((0, y, 1279, y), fill=(*INK, alpha))
         for sign, color in zip((-1, 1), self.colors):
             overlay.polygon([(640, self.horizon), (640+sign*505, 632), (640+sign*147, 632)],
-                            fill=(*INK, 53))
+                            fill=(*INK, 105 if self.has_video else 53))
             overlay.line((640, self.horizon, 640+sign*505, 632), fill=(*color, 125), width=2)
 
     def procedural_stage(self, im, d):
@@ -167,9 +180,11 @@ class Arena:
                 self.pylons(d, side, color)
 
     def background(self, title):
-        im = Image.new("RGB", (1280, 720), INK)
+        im = Image.new("RGBA", (1280, 720), (*INK, 65)) if self.has_video else Image.new("RGB", (1280, 720), INK)
         d = ImageDraw.Draw(im)
-        if self.scene in ART_HORIZONS:
+        if self.has_video:
+            self.stage_guides(im)
+        elif self.scene in ART_HORIZONS:
             self.illustrated_stage(im)
         else:
             self.procedural_stage(im, d)
@@ -180,6 +195,12 @@ class Arena:
                 cx, cy = x+dx*85, HIT_Y+dy*65
                 d.line([(cx-dx*20,cy),(cx,cy),(cx,cy-dy*16)], fill=blend(INK,color,.85),width=3)
             d.ellipse((x-91,HIT_Y+53,x+91,HIT_Y+69),outline=blend(INK,color,.55),width=2)
+        if self.has_video:
+            # Paste moving pixels through this cached mask; solid hit guides remain opaque.
+            stage = (0, STAGE_TOP, STAGE_SIZE[0], STAGE_TOP + STAGE_SIZE[1])
+            self.video_mask = ImageOps.invert(im.getchannel("A").crop(stage))
+            im = im.convert("RGB")
+            d = ImageDraw.Draw(im)
         # Header remains legible even with a crowded chart.
         d.rectangle((0,0,1280,76),fill=(12,21,35))
         d.line((0,76,1280,76),fill=(57,77,95))
@@ -272,13 +293,22 @@ class Arena:
                 star.append((x+cos(angle)*length*flare, y+sin(angle)*length*flare*.8))
             d.polygon(star, fill=hot)
 
-    def frame(self,t):
+    def frame(self, t, *, background_frame=None):
         im=self.base.copy()
+        if self.has_video:
+            if background_frame is None:
+                raise ValueError("A decoded background frame is required for this course")
+            im.paste(background_frame, (0, STAGE_TOP), self.video_mask)
         d=ImageDraw.Draw(im)
         index=bisect_right(self.times,t)
         end=bisect_right(self.times,t+self.lead)
         if self.neon:
             self.runway_lights(d, t, index)
+        if self.wave_style != "off":
+            draw_wave(im, self.wave_style, self.envelope, t, self.colors)
+        opening = self.opening is not None and 0 <= t < TITLE_SECONDS
+        if opening:
+            self.opening.draw(im, t)
         for j in range(end - 1, index - 1, -1):
             move = MOVEMENTS[self.notes[j]["action"]]
             color = self.colors[0 if move.side == LEFT else 1]
@@ -299,8 +329,8 @@ class Arena:
                 self.burst(im, d, move.side, move.kind == "hook", age, color)
         self.coach.draw(im, t)
         im.paste(self.base.crop((0,632,1280,720)),(0,632))
-        if t < self.times[0] - self.lead:
-            if self.scene in ART_HORIZONS:
+        if not opening and t < self.times[0] - self.lead:
+            if self.has_video or self.scene in ART_HORIZONS:
                 ImageDraw.Draw(im, "RGBA").rounded_rectangle((385, 273, 895, 392), radius=16, fill=(*INK, 192))
             text(im,(640,295),"跟随拍点 · 准备开始",36,WHITE,True,"center")
             text(im,(640,352),"直箭头打直拳   /   横弯打摆拳   /   上挑打上勾拳",20,DUSK,False,"center")
@@ -325,7 +355,7 @@ class Arena:
         self.hud.draw(im, t, index)
         elapsed=int(t)
         text(im,(42,104),f"{elapsed//60:02d}:{elapsed%60:02d}",25,WHITE,True)
-        count_color = WHITE if self.scene in ART_HORIZONS else DUSK
+        count_color = WHITE if self.has_video or self.scene in ART_HORIZONS else DUSK
         text(im,(1234,106),f"{index:02d}  /  {len(self.notes):02d}",22,count_color,True,"right")
         d.line((0,717,1280*t/self.duration,717),fill=self.colors[0],width=4)
         return im if self.size==im.size else im.resize(self.size,Image.Resampling.BILINEAR)
