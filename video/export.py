@@ -121,6 +121,8 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
                        "source_beats": chart["beats"], "sections": chart.get("sections", []), "notes": notes}
         if uses_padwork(course) and "lyric_starts" in course:
             diagnostics["lyric_starts"] = course["lyric_starts"]
+        if uses_padwork(course) and "chorus_starts" in course:
+            diagnostics["chorus_starts"] = course["chorus_starts"]
         diagnostics["combo_count"] = sum(note.get("combo_step") == 1 for note in notes)
         diagnostics["lyric_style"] = picture.get("lyrics", "off")
         diagnostics["visible_lyric_lines"] = (sum(bool(visible_text(row["text"])) for row in course.get("lyric_lines", ()))

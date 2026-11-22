@@ -11,7 +11,7 @@ from movements import MOVEMENTS, LEFT
 from cue_art import punch_icon, foot_pad, step_landing
 from coach_avatar import CoachLayer
 from lettering import font, text
-from workout_hud import WorkoutHud
+from workout_hud import WorkoutHud, combo_caption
 
 INK = (11, 21, 36)
 WHITE = (240, 248, 252)
@@ -320,7 +320,7 @@ class Arena:
         hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
         text(im,(640,692),hint,15,DUSK,False,"center")
         if cue and cue.get("combo_name") and (just_hit or cue["combo_step"] > 1):
-            caption = f"组合拳  /  {cue['combo_name']}     {cue['combo_step']}/{cue['combo_total']}"
+            caption = f"组合拳  /  {combo_caption(cue)}     {cue['combo_step']}/{cue['combo_total']}"
             text(im,(640,107),caption,25,WHITE,True,"center")
         self.hud.draw(im, t, index)
         elapsed=int(t)

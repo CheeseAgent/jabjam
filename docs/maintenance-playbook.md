@@ -19,6 +19,7 @@
 | 新增场景 | `assets/arenas/*`, `video/course.py`, `video/arena.py`, `.github/workflows/render-video.yml` | `tests/test_arena_scenes.py`, 一段示例 MP4 | 运行中途自动随机切背景；丢失兼容场景 ID |
 | 更改场景背景图 | `assets/arenas/<scene>.jpg` | 抽帧对比轨道与 HUD，测试固定场景 | 改动拳法、节拍与教练 |
 | 增加经典拳组 | `video/choreography.py` 的 `PADWORK_COMBOS` | `tests/test_video_pacing.py` + `--write-course` | 随机拆散组合或突破恢复间隔 |
+| 给一首歌标副歌招牌组合 | 在课程 `course.chorus_starts` 填同一句副歌的各个起唱秒数，可选 `chorus_combo`；[示范与拳序](video-export.md#副歌招牌组合) | `--check` 核对标记数，再在导出的谱里检查每次的 `chorus_cue`、起手与拳数 | 直接套用其他录音版本的时间 |
 | 修改课程/音轨参数 | `courses/*.json`；私有歌曲只在私有仓库 `courses/` | `video/export.py <course> --check`，真实音轨需试出片 | 在公开仓库添加私人音乐 |
 | 修改踩点算法 | `scripts/chart_generator.gd`, `video/choreography.py` 及相关测试 | Godot + 编排回归、真实音轨人工校准 | 双重应用 `beat_offset_ms`、仅凭合成音频宣称真实歌曲正确 |
 | 调整小奶茶动作姿势 | `assets/coaches/milktea/rig/motions.json`, `assets/coaches/timing.json` | `tests/test_cutout_rig.py`, `tests/test_coach_avatar.py`, 关键姿势抽帧 | 改稳定动作 ID/拍点时间；破坏收拳、蓄力、双脚跟进 |

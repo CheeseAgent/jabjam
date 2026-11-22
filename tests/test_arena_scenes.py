@@ -111,6 +111,16 @@ class ArenaScenes(unittest.TestCase):
             off.frame(8.1)
             self.assertIn("下一组  ·  左起  ·  直直", [c.args[2] for c in draw.call_args_list])
 
+    def test_chorus_callout_and_hit_agree_after_seeking(self):
+        notes = [dict(time=t, action=a, combo_name="直直摆", combo_step=i, combo_total=3, chorus_cue="mirror")
+                 for i, (t, a) in enumerate([(8, "right_jab"), (8.5, "left_jab"), (9, "right_hook")], 1)]
+        arena = Arena("Test", {}, notes, 12)
+        with patch("arena.text") as caption, patch("workout_hud.text") as callout:
+            arena.frame(8)
+            self.assertIn("组合拳  /  副歌换边 · 直直摆     1/3", [c.args[2] for c in caption.call_args_list])
+            arena.frame(7.5)
+            self.assertIn("下一组  ·  右起  ·  副歌换边 · 直直摆", [c.args[2] for c in callout.call_args_list])
+
 
 if __name__ == "__main__":
     unittest.main()
