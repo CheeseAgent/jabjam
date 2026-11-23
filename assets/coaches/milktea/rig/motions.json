@@ -1189,7 +1189,7 @@
     "advance_finish": {
       "pelvis": [
         0,
-        18,
+        14,
         0
       ]
     },
@@ -1279,7 +1279,7 @@
     "retreat_finish": {
       "pelvis": [
         0,
-        -18,
+        -14,
         0
       ]
     },
@@ -1791,7 +1791,7 @@
       ]
     }
   },
-  "depth_stride_px": 18,
+  "depth_stride_px": 14,
   "stance": {
     "lead_forward_px": 14,
     "rear_back_px": 9,
