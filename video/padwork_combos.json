@@ -1,0 +1,230 @@
+{
+  "format": "jabjam.padwork-combos",
+  "version": 1,
+  "bands": {
+    "warmup": [
+      {
+        "id": "straight_pair",
+        "label": "直直",
+        "moves": [
+          "jab",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_hook",
+        "label": "直摆",
+        "moves": [
+          "jab",
+          "hook"
+        ]
+      }
+    ],
+    "steady": [
+      {
+        "id": "jab_jab_hook",
+        "label": "直直摆",
+        "moves": [
+          "jab",
+          "jab",
+          "hook"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut",
+        "label": "直直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut"
+        ]
+      },
+      {
+        "id": "jab_hook_jab",
+        "label": "直摆直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_uppercut_jab",
+        "label": "直勾直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab",
+        "label": "直直摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut_jab",
+        "label": "直直勾直",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut",
+          "jab"
+        ]
+      }
+    ],
+    "peak": [
+      {
+        "id": "jab_jab_hook_uppercut_jab",
+        "label": "直直摆勾直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "uppercut",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab_uppercut",
+        "label": "直直摆直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "uppercut"
+        ]
+      },
+      {
+        "id": "jab_uppercut_jab_hook_jab",
+        "label": "直勾直摆直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab",
+          "hook",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut_hook_jab",
+        "label": "直直勾摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_hook_jab_uppercut_jab",
+        "label": "直摆直勾直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab",
+          "uppercut",
+          "jab"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab_hook",
+        "label": "直直摆直摆",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "hook"
+        ]
+      }
+    ],
+    "six": [
+      {
+        "id": "double_three",
+        "label": "直直摆直直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut"
+        ]
+      },
+      {
+        "id": "six_turn",
+        "label": "直摆直勾摆直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ]
+      }
+    ],
+    "eight": [
+      {
+        "id": "two_fours",
+        "label": "直直摆直直勾摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ]
+      },
+      {
+        "id": "eight_turn",
+        "label": "直勾直摆直直勾直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut",
+          "jab"
+        ]
+      }
+    ]
+  },
+  "section_bands": {
+    "normal": [
+      "warmup",
+      "steady",
+      "peak"
+    ],
+    "hard": [
+      "warmup",
+      "peak",
+      "six"
+    ],
+    "expert": [
+      "steady",
+      "six",
+      "eight"
+    ]
+  },
+  "chorus_finales": {
+    "jab_jab_hook": "jab_jab_hook_uppercut_jab",
+    "jab_jab_uppercut": "jab_jab_uppercut_hook_jab",
+    "jab_hook_jab": "jab_hook_jab_uppercut_jab",
+    "jab_uppercut_jab": "jab_uppercut_jab_hook_jab"
+  },
+  "default_chorus": "jab_jab_hook"
+}
