@@ -79,6 +79,10 @@ python3 video/export.py courses/lyrics-and-combos.json build/expert-ring.mp4 --d
 
 ## 固定组合拳练习（padwork）
 
+经典连招现在由 [`video/padwork_combos.json`](video/padwork_combos.json) 维护，不用改 Python。`bands` 按训练强度列出每套连招的 `id`、`label` 和 `moves`（`jab` 直拳、`hook` 摆拳、`uppercut` 上勾拳），`section_bands` 指定 Normal/Hard/Expert 的递进组合，`chorus_finales` 定义副歌延长版。连招 ID 必须唯一；副歌延长版必须以原三拳开头。修改后运行 `python3 tests/test_video_pacing.py` 和完整回归。现有 18 套连招已原样迁入。
+
+
+
 想让同一句副歌回来时练同一套动作，可以在课程的 `course.chorus_starts` 填它每次起唱的秒数。小奶茶会先左起教「直直摆」，再换右手，第三次及以后的最后一遍有空间就接成「直直摆勾直」。[37 秒示范课程](courses/chorus-signature.json) 在第 8、18、28 秒演示三次变化。[选择其他招牌组合与标记方法](docs/video-export.md#副歌招牌组合)
 
 想让小奶茶跟着歌词起手，把逐行带时间的 `song.lrc` 放在 `song.mp3` 旁边，使用 Normal、Hard 或 Expert 的自动喂靶谱。歌手提前半拍开口，第一拳就跟着提前，第二拳起继续踩鼓点。相邻短句可以共用一组，收拳后在下一处合适的句首起手。也可以直接在课程里填写句首秒数。[歌词时间和示例](docs/video-export.md#按歌词起拳)
