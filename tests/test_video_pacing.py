@@ -36,6 +36,22 @@ class VideoPacing(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "needs"):
                     pace_notes(notes, self.course, False)
 
+    def test_forward_backward_and_duck_are_valid_and_spaced(self):
+        from course import read_actions
+        for action in ("step_forward", "step_backward", "duck"):
+            self.assertEqual(read_actions([{"time": 4, "action": action}])[0]["action"], action)
+            self.assertIn(action, MOVEMENTS)
+        for sequence in [
+            ("step_forward", "duck"),
+            ("duck", "step_backward"),
+            ("step_forward", "step_backward"),
+        ]:
+            valid = [{"time": 4, "action": sequence[0]}, {"time": 5.5, "action": sequence[1]}]
+            self.assertEqual(arrange(valid, self.course, False), valid)
+            invalid = [{"time": 4, "action": sequence[0]}, {"time": 5.49, "action": sequence[1]}]
+            with self.assertRaisesRegex(ValueError, "needs"):
+                arrange(invalid, self.course, False)
+
     def test_step_needs_recovery_on_both_sides_of_beat(self):
         for difficulty, gap in [("easy", 1.75), ("normal", 1.5)]:
             course = dict(self.course, difficulty=difficulty)
@@ -57,7 +73,9 @@ class VideoPacing(unittest.TestCase):
         result = arrange(original, mixed, True)
         self.assertEqual(result, arrange(original, mixed, True))
         self.assertTrue(all(n["time"] in range(3, 51) for n in result))
-        self.assertEqual({n["action"] for n in result}, set(MOVEMENTS))
+        self.assertEqual({n["action"] for n in result},
+                         {"left_jab", "right_jab", "left_hook", "right_hook",
+                          "left_uppercut", "right_uppercut", "step_left", "step_right"})
         steps = [n["action"] for n in result if MOVEMENTS[n["action"]].kind == "step"]
         self.assertEqual(steps, ["step_left", "step_right", "step_right", "step_left"])
         self.assertEqual(result, pace_notes(result, mixed, False))
