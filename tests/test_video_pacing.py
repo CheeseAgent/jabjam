@@ -19,6 +19,58 @@ class VideoPacing(unittest.TestCase):
     def setUp(self):
         self.course = {"difficulty": "normal", "min_gap": .7}
 
+    def test_padwork_combo_library_is_json_and_rejects_invalid_extensions(self):
+        from choreography import PADWORK_COMBOS, SECTION_BANDS, CHORUS_FINALES, load_padwork_library
+        source = ROOT / "video/padwork_combos.json"
+        data = json.loads(source.read_text(encoding="utf-8"))
+        self.assertEqual(sum(len(v) for v in PADWORK_COMBOS.values()), 18)
+        self.assertEqual([tpl[0] for tpl in PADWORK_COMBOS["warmup"]],
+                         [item["id"] for item in data["bands"]["warmup"]])
+        self.assertEqual(SECTION_BANDS["expert"], tuple(data["section_bands"]["expert"]))
+        self.assertEqual(CHORUS_FINALES, data["chorus_finales"])
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "custom-combos.json"
+            data["bands"]["warmup"].append({"id": "custom_pair", "label": "直勾", "moves": ["jab", "uppercut"]})
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            custom, _, _, _ = load_padwork_library(path)
+            self.assertEqual(custom["warmup"][-1], ("custom_pair", "直勾", ("jab", "uppercut"), ("left", "right")))
+            data["bands"]["warmup"][-1]["moves"] = ["jab", "unknown"]
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Invalid/duplicate"):
+                load_padwork_library(path)
+
+    def test_padwork_hands_allow_double_same_side_and_mirroring(self):
+        from choreography import _place_combo, load_padwork_library, required_gap
+        source = ROOT / "video/padwork_combos.json"
+        data = json.loads(source.read_text(encoding="utf-8"))
+        data["bands"]["warmup"].append({"id": "double_left", "label": "左直左直右摆",
+                                        "moves": ["jab", "jab", "hook"],
+                                        "hands": ["left", "left", "right"]})
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "combos.json"
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            combos, _, _, _ = load_padwork_library(path)
+            template = combos["warmup"][-1]
+            self.assertEqual(template[3], ("left", "left", "right"))
+            beats = [i / 4 for i in range(300)]
+            course = {"min_gap": .45, "difficulty": "normal"}
+            a = _place_combo(template, 0, beats, 4, course, beats)
+            b = _place_combo(template, 1, beats, 4, course, beats)
+            self.assertEqual([note["action"] for note in a],
+                             ["left_jab", "left_jab", "right_hook"])
+            self.assertEqual([note["action"] for note in b],
+                             ["right_jab", "right_jab", "left_hook"])
+            for notes in (a,b):
+                for first, second in zip(notes, notes[1:]):
+                    self.assertGreaterEqual(second["time"]-first["time"]+1e-9,
+                        required_gap(MOVEMENTS[first["action"]], MOVEMENTS[second["action"]], course))
+            self.assertEqual(len(a), 3)
+            self.assertEqual([note["combo_step"] for note in a], [1, 2, 3])
+            data["bands"]["warmup"][-1]["hands"] = ["left", "right"]
+            path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "Invalid hands"):
+                load_padwork_library(path)
+
     def test_auto_preserves_beats_and_alternation(self):
         notes = [{"time": t, "action": action} for t, action in
                  [(3, "left_hook"), (3.8, "right_jab"), (4.6, "left_jab"), (5.4, "right_jab")]]

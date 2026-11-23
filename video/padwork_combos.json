@@ -1,0 +1,348 @@
+{
+  "format": "jabjam.padwork-combos",
+  "version": 1,
+  "bands": {
+    "warmup": [
+      {
+        "id": "straight_pair",
+        "label": "直直",
+        "moves": [
+          "jab",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right"
+        ]
+      },
+      {
+        "id": "jab_hook",
+        "label": "直摆",
+        "moves": [
+          "jab",
+          "hook"
+        ],
+        "hands": [
+          "left",
+          "right"
+        ]
+      }
+    ],
+    "steady": [
+      {
+        "id": "jab_jab_hook",
+        "label": "直直摆",
+        "moves": [
+          "jab",
+          "jab",
+          "hook"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut",
+        "label": "直直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_hook_jab",
+        "label": "直摆直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_uppercut_jab",
+        "label": "直勾直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab",
+        "label": "直直摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut_jab",
+        "label": "直直勾直",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      }
+    ],
+    "peak": [
+      {
+        "id": "jab_jab_hook_uppercut_jab",
+        "label": "直直摆勾直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "uppercut",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab_uppercut",
+        "label": "直直摆直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "uppercut"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_uppercut_jab_hook_jab",
+        "label": "直勾直摆直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_jab_uppercut_hook_jab",
+        "label": "直直勾摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_hook_jab_uppercut_jab",
+        "label": "直摆直勾直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab",
+          "uppercut",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      },
+      {
+        "id": "jab_jab_hook_jab_hook",
+        "label": "直直摆直摆",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "hook"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left"
+        ]
+      }
+    ],
+    "six": [
+      {
+        "id": "double_three",
+        "label": "直直摆直直勾",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      },
+      {
+        "id": "six_turn",
+        "label": "直摆直勾摆直",
+        "moves": [
+          "jab",
+          "hook",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      }
+    ],
+    "eight": [
+      {
+        "id": "two_fours",
+        "label": "直直摆直直勾摆直",
+        "moves": [
+          "jab",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut",
+          "hook",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      },
+      {
+        "id": "eight_turn",
+        "label": "直勾直摆直直勾直",
+        "moves": [
+          "jab",
+          "uppercut",
+          "jab",
+          "hook",
+          "jab",
+          "jab",
+          "uppercut",
+          "jab"
+        ],
+        "hands": [
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right",
+          "left",
+          "right"
+        ]
+      }
+    ]
+  },
+  "section_bands": {
+    "normal": [
+      "warmup",
+      "steady",
+      "peak"
+    ],
+    "hard": [
+      "warmup",
+      "peak",
+      "six"
+    ],
+    "expert": [
+      "steady",
+      "six",
+      "eight"
+    ]
+  },
+  "chorus_finales": {
+    "jab_jab_hook": "jab_jab_hook_uppercut_jab",
+    "jab_jab_uppercut": "jab_jab_uppercut_hook_jab",
+    "jab_hook_jab": "jab_hook_jab_uppercut_jab",
+    "jab_uppercut_jab": "jab_uppercut_jab_hook_jab"
+  },
+  "default_chorus": "jab_jab_hook"
+}
