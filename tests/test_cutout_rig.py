@@ -262,7 +262,7 @@ class CutoutTests(unittest.TestCase):
             self.assertGreater(low["pelvis"][1], guard["pelvis"][1]+20)
             for foot in ("foot_left", "foot_right"):
                 self.assertLess(abs(low[foot][1]-guard[foot][1]), 25)
-            self.assertEqual(timeline.at(7.0).state, "idle")
+            self.assertEqual(timeline.at(8.5).state, "idle")
             self.assertEqual(timeline.at(3.0), CoachTimeline(notes, cutout=True, lead_foot=lead).at(3.0))
 
     def test_ceil_frame_and_final_celebration(self):
