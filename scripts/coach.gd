@@ -6,6 +6,8 @@ var timing: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://
 var times := PackedFloat64Array()
 var actions := PackedStringArray()
 var stances := PackedInt32Array([0])
+var depths := PackedInt32Array([0])
+@export_enum("left", "right") var lead_foot := "left"
 var focus_starts := PackedFloat64Array()
 var focus_ends := PackedFloat64Array()
 
@@ -24,6 +26,7 @@ func set_chart(notes: Array) -> void:
 	times.clear()
 	actions.clear()
 	stances = PackedInt32Array([0])
+	depths = PackedInt32Array([0])
 	focus_starts.clear()
 	focus_ends.clear()
 	for note: Dictionary in notes:
@@ -35,7 +38,9 @@ func set_chart(notes: Array) -> void:
 		elif note.action == "step_right":
 			step = 1
 		stances.append(clampi(stances[-1]+step, -1, 1))
-		if step == 0:
+		var depth_step := 1 if note.action == "step_forward" else (-1 if note.action == "step_backward" else 0)
+		depths.append(clampi(depths[-1]+depth_step, -1, 1))
+		if not str(note.action).begins_with("step_"):
 			var face: Dictionary = timing.cutout.focus
 			var start := maxf(0.0, float(note.time)-float(face.lead))
 			var end := float(note.time)+float(face.hold)
@@ -47,7 +52,7 @@ func set_chart(notes: Array) -> void:
 
 func seek(t: float) -> void:
 	var pose := pose_at(t)
-	rig.apply_pose(pose[0], pose[1], pose[2], pose[3], pose[4])
+	rig.apply_pose(pose[0], pose[1], pose[2], pose[3], pose[4], pose[5], lead_foot)
 
 func pose_at(t: float) -> Array:
 	# The same half-open boundaries as video/coach_timeline.py. No accumulating timer.
@@ -58,7 +63,7 @@ func pose_at(t: float) -> Array:
 	var strike := float(timing.strike)
 	var recover := float(timing.recover)
 	if i < times.size():
-		var kind := "step" if actions[i].begins_with("step_") else actions[i].get_slice("_", 1)
+		var kind := "advance" if actions[i] == "step_forward" else ("retreat" if actions[i] == "step_backward" else ("step" if actions[i].begins_with("step_") else (actions[i] if actions[i] == "duck" else actions[i].get_slice("_", 1))))
 		prepare = minf(float(timing.cutout.prepare[kind]), times[i])
 	if i > 0 and actions[i-1].begins_with("step_"):
 		recover = float(timing.cutout.step_recover)
@@ -70,15 +75,15 @@ func pose_at(t: float) -> Array:
 	if i < times.size():
 		var until_hit := times[i] - t
 		if until_hit > 0 and until_hit <= prepare:
-			return ["prepare", actions[i], 1.0 - until_hit/prepare, stances[i], focused]
+			return ["prepare", actions[i], 1.0 - until_hit/prepare, stances[i], focused, depths[i]]
 	if i > 0:
 		var elapsed := t - times[i-1]
 		if elapsed < strike:
-			return ["strike", actions[i-1], elapsed/strike, stances[i-1], focused]
+			return ["strike", actions[i-1], elapsed/strike, stances[i-1], focused, depths[i-1]]
 		if elapsed < strike + recover:
-			return ["recover", actions[i-1], (elapsed-strike)/recover, stances[i-1], focused]
+			return ["recover", actions[i-1], (elapsed-strike)/recover, stances[i-1], focused, depths[i-1]]
 		if i == times.size():
 			var phase := (elapsed-strike-recover) / float(timing.celebrate)
 			if phase >= 0.0 and phase < 1.0:
-				return ["celebrate", "", phase, stances[i], focused]
-	return ["idle", "", fmod(t, float(timing.idle)) / float(timing.idle), stances[i], focused]
+				return ["celebrate", "", phase, stances[i], focused, depths[i]]
+	return ["idle", "", fmod(t, float(timing.idle)) / float(timing.idle), stances[i], focused, depths[i]]

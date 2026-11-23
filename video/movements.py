@@ -22,4 +22,7 @@ MOVEMENTS = {
     "right_uppercut": Movement("右上勾拳", "uppercut", RIGHT),
     "step_left": Movement("向左侧步", "step", LEFT),
     "step_right": Movement("向右侧步", "step", RIGHT),
+    "step_forward": Movement("向前跟步", "advance", 0),
+    "step_backward": Movement("向后撤步", "retreat", 0),
+    "duck": Movement("下潜闪躲", "duck", 0),
 }

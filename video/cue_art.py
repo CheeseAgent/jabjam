@@ -36,8 +36,13 @@ def foot_pad(draw, x, y, radius, move, color):
     sole_x = x - move.side * radius * .38
     draw.ellipse((sole_x-radius*.20, y-height*.84, sole_x+radius*.22, y+height*.13), fill=ink)
     draw.ellipse((sole_x-radius*.16, y+height*.28, sole_x+radius*.14, y+height*.76), fill=ink)
-    chevron = [(.05, -.57), (.42, -.57), (.83, 0), (.42, .57), (.05, .57), (.46, 0)]
-    draw.polygon([(x+move.side*dx*radius, y+dy*height) for dx, dy in chevron], fill=ink)
+    if move.kind in ("advance", "retreat"):
+        direction = -1 if move.kind == "advance" else 1
+        arrow = [(-.34, -.06), (-.34, .25), (0, .25), (0, .70), (.65, 0), (0, -.70), (0, -.25), (-.34, -.25)]
+        draw.polygon([(x+dx*radius, y+direction*dy*height) for dx, dy in arrow], fill=ink)
+    else:
+        chevron = [(.05, -.57), (.42, -.57), (.83, 0), (.42, .57), (.05, .57), (.46, 0)]
+        draw.polygon([(x+move.side*dx*radius, y+dy*height) for dx, dy in chevron], fill=ink)
 
 
 def step_landing(draw, x, y, radius, move, color, phase):
@@ -47,3 +52,16 @@ def step_landing(draw, x, y, radius, move, color, phase):
     draw.ellipse((x-radius_x, y-radius_y, x+radius_x, y+radius_y),
                  outline=color, width=max(1, round(5*(1-phase))))
     foot_pad(draw, x, y, radius*(1-.55*phase), move, color)
+
+
+def duck_icon(draw, x, y, radius, color):
+    """Bent knees and a downward arrow: dodge, not another punch."""
+    ink = (13, 31, 44)
+    width = max(2, round(radius * .11))
+    draw.ellipse((x-radius*.26,y-radius*.66,x+radius*.26,y-radius*.14),fill=ink)
+    draw.line([(x,y-radius*.03),(x,y+radius*.34),(x-radius*.42,y+radius*.54)],
+              fill=ink,width=width,joint="curve")
+    draw.line([(x,y+radius*.34),(x+radius*.42,y+radius*.54)],
+              fill=ink,width=width,joint="curve")
+    draw.polygon([(x-radius*.18,y+radius*.52),(x+radius*.18,y+radius*.52),
+                  (x,y+radius*.82)],fill=color)

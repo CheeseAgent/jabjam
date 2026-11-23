@@ -55,6 +55,8 @@ class CutoutRig:
         self.size = tuple(rig["canvas"])
         self.bones = rig["bones"]
         self.stride = motion.get("stride_px", 0)
+        self.depth_stride = motion.get("depth_stride_px", 0)
+        self.stance_geometry = motion.get("stance", {})
         self.turns = motion.get("turns", {})
         self.shoulder = rig.get("shoulder_projection", {})
         self.poses = motion["poses"]
@@ -86,7 +88,8 @@ class CutoutRig:
     def _sample(self, pose):
         movement = MOVEMENTS[pose.action] if pose.action else None
         kind = movement.kind if movement else pose.state
-        mirror = movement is not None and movement.side > 0
+        mirror = (movement is not None and
+                  (movement.side > 0 or (kind in ("advance", "retreat") and pose.lead_foot == "right")))
         keys = self.motions[kind][pose.state]
         i = max(1, min(len(keys)-1, bisect_right([k[0] for k in keys], pose.phase)))
         t0, a = keys[i-1]
@@ -109,6 +112,16 @@ class CutoutRig:
             zooms[name] = zoom0 + (zoom1 - zoom0)*u
             x = bone["at"][0] + (-dx if mirror else dx)
             y = bone["at"][1] + dy
+            if name in ("thigh_left", "thigh_right"):
+                lead = name == "thigh_" + pose.lead_foot
+                if lead:
+                    y += self.stance_geometry.get("lead_forward_px", 0)
+                    x += (-1 if pose.lead_foot == "left" else 1) * self.stance_geometry.get("lead_spread_px", 0)
+                else:
+                    y -= self.stance_geometry.get("rear_back_px", 0)
+                    x += (1 if pose.lead_foot == "left" else -1) * self.stance_geometry.get("rear_spread_px", 0)
+            if name in ("foot_left", "foot_right"):
+                zooms[name] *= 1.05 if name == "foot_" + pose.lead_foot else .98
             angle = bone.get("angle", 0) + (-angle if mirror else angle)
             parent_scale = limb_scales.get(bone["parent"],1.)
             limb_scales[name] = parent_scale
@@ -128,6 +141,9 @@ class CutoutRig:
                 if self.stride and kind == "step" and pose.stance == movement.side:
                     x = bone["at"][0]
                 x += pose.stance * self.stride
+                if kind in ("advance", "retreat") and pose.depth == (1 if kind == "advance" else -1):
+                    y = bone["at"][1]
+                y += pose.depth * self.depth_stride
             world[name] = (x, y, math.radians(angle))
         return world, zooms, yaw, limb_scales
 

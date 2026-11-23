@@ -12,6 +12,8 @@ var surfaces := {}
 var turns := {}
 var shoulder := {}
 var stride := 0.0
+var depth_stride := 0.0
+var stance_geometry := {}
 var faces := {}
 var face_sprite: Sprite2D
 var poses := {}
@@ -19,9 +21,13 @@ var motions := {}
 var textures := {}
 
 @export_group("Pose preview")
-@export_enum("idle", "left_jab", "right_jab", "left_hook", "right_hook", "left_uppercut", "right_uppercut", "step_left", "step_right", "celebrate") var preview_action := "idle":
+@export_enum("idle", "left_jab", "right_jab", "left_hook", "right_hook", "left_uppercut", "right_uppercut", "step_left", "step_right", "step_forward", "step_backward", "duck", "celebrate") var preview_action := "idle":
 	set(value):
 		preview_action = value
+		_preview()
+@export_enum("left", "right") var preview_lead_foot := "left":
+	set(value):
+		preview_lead_foot = value
 		_preview()
 @export_enum("prepare", "strike", "recover") var preview_state := "strike":
 	set(value):
@@ -35,9 +41,9 @@ var textures := {}
 func _preview() -> void:
 	if Engine.is_editor_hint() and face_sprite:
 		if preview_action in ["idle", "celebrate"]:
-			apply_pose(preview_action, "", preview_phase)
+			apply_pose(preview_action, "", preview_phase, 0, null, 0, preview_lead_foot)
 		else:
-			apply_pose(preview_state, preview_action, preview_phase)
+			apply_pose(preview_state, preview_action, preview_phase, 0, null, 0, preview_lead_foot)
 
 func _ready() -> void:
 	var rig: Dictionary = JSON.parse_string(FileAccess.get_file_as_string(DIR + "rig.json"))
@@ -47,6 +53,8 @@ func _ready() -> void:
 	bones = rig.bones
 	canvas_size = _vector(rig.canvas)
 	stride = float(motion.get("stride_px", 0))
+	depth_stride = float(motion.get("depth_stride_px", 0))
+	stance_geometry = motion.get("stance", {})
 	turns = motion.get("turns", {})
 	shoulder = rig.get("shoulder_projection", {})
 	poses = motion.poses
@@ -128,13 +136,19 @@ func _project_art(bone: Dictionary, zoom: float) -> void:
 			zoom = lerpf(1.0, front.cuff_scale, depth)
 	art.scale = Vector2.ONE * zoom
 
-func apply_pose(state: String, action: String, phase: float, stance := 0, focused: Variant = null) -> void:
+func apply_pose(state: String, action: String, phase: float, stance := 0, focused: Variant = null, depth := 0, lead_foot := "left") -> void:
 	var kind := state
-	if action.begins_with("step_"):
+	if action == "step_forward":
+		kind = "advance"
+	elif action == "step_backward":
+		kind = "retreat"
+	elif action == "duck":
+		kind = "duck"
+	elif action.begins_with("step_"):
 		kind = "step"
 	elif not action.is_empty():
 		kind = action.get_slice("_", 1)
-	var mirror := action.begins_with("right_") or action == "step_right"
+	var mirror := action.begins_with("right_") or action == "step_right" or (kind in ["advance", "retreat"] and lead_foot == "right")
 	var keys: Array = motions[kind][state]
 	var i := 1
 	while i < keys.size()-1 and phase >= float(keys[i][0]):
@@ -155,12 +169,23 @@ func apply_pose(state: String, action: String, phase: float, stance := 0, focuse
 		if bone.has("surface"):
 			var turn_angle := yaw.x if bone.surface.turn == "hips" else yaw.y
 			surfaces[bone.id].set_shader_parameter("yaw", turn_angle*float(bone.surface.amount))
+		var stagger := Vector2.ZERO
+		if str(bone.id).begins_with("thigh_"):
+			var is_lead := str(bone.id) == "thigh_" + lead_foot
+			if is_lead:
+				stagger.y = float(stance_geometry.get("lead_forward_px", 0))
+				stagger.x = (-1.0 if lead_foot == "left" else 1.0) * float(stance_geometry.get("lead_spread_px", 0))
+			else:
+				stagger.y = -float(stance_geometry.get("rear_back_px", 0))
+				stagger.x = (1.0 if lead_foot == "left" else -1.0) * float(stance_geometry.get("rear_spread_px", 0))
 		if bone.parent == null:
 			if stride > 0 and kind == "step" and stance == (1 if mirror else -1):
 				offset.x = 0.0
-			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x + stance*stride, offset.y)
+			if kind in ["advance", "retreat"] and depth == (1 if kind == "advance" else -1):
+				offset.y = 0.0
+			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x + stance*stride, offset.y + depth*depth_stride)
 		else:
-			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x, offset.y)
+			joint.position = _vector(bone.at) + Vector2(sign_x * offset.x, offset.y) + stagger
 		if bone.has("shoulder_side"):
 			var near := -float(bone.shoulder_side) * sin(yaw.y)
 			var perspective := 1.0 + near*float(shoulder.depth_scale)
@@ -169,7 +194,10 @@ func apply_pose(state: String, action: String, phase: float, stance := 0, focuse
 			joint.scale = Vector2.ONE * perspective
 		var zoom_a := float(a[3]) if a.size() == 4 else 1.0
 		var zoom_b := float(b[3]) if b.size() == 4 else 1.0
-		_project_art(bone, lerpf(zoom_a, zoom_b, amount))
+		var zoom := lerpf(zoom_a, zoom_b, amount)
+		if str(bone.id).begins_with("foot_"):
+			zoom *= 1.05 if str(bone.id) == "foot_" + lead_foot else 0.98
+		_project_art(bone, zoom)
 		joint.rotation_degrees = float(bone.get("angle", 0)) + sign_x * lerpf(a[2], b[2], amount)
 	var expression := "open"
 	if focused:

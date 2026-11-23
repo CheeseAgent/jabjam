@@ -8,6 +8,7 @@ from PIL import Image, ImageDraw
 
 from coach_rig import CutoutRig
 from coach_timeline import CoachTimeline, validate_coach_config
+from lettering import text
 
 ASSETS = Path(__file__).resolve().parents[1] / "assets" / "coaches"
 GROUND_Y = 625
@@ -36,7 +37,7 @@ class VectorCoach:
         d = ImageDraw.Draw(image)
         shift = round(3 * math.sin(t * 3.2))
         action = pose.action or ""
-        if action.startswith("step_"):
+        if action in ("step_left", "step_right"):
             direction = -1 if action == "step_left" else 1
             if pose.state == "prepare":
                 shift += round(direction * 9 * pose.phase)
@@ -161,7 +162,8 @@ class CoachLayer:
         self.enabled = self.settings["enabled"]
         if self.enabled:
             backend = self.settings["renderer"]
-            self.timeline = CoachTimeline(notes, cutout=backend == "rig")
+            self.timeline = CoachTimeline(notes, cutout=backend == "rig",
+                                          lead_foot=self.settings["lead_foot"])
             if backend == "vector":
                 self.renderer = VectorCoach()
             elif backend == "sprite":
@@ -173,3 +175,7 @@ class CoachLayer:
         if self.enabled:
             pose = self.timeline.at(t)
             self.renderer.draw(canvas, pose, t, self.settings["side"], self.settings["scale"])
+            if self.settings["show_stance_label"] and self.settings["renderer"] == "rig":
+                label = "左脚前 · 正架" if self.settings["lead_foot"] == "left" else "右脚前 · 反架"
+                text(canvas, (_location(self.settings["side"]), 607), label, 18,
+                     (240, 248, 252), True, "center")

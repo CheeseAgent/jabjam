@@ -245,6 +245,26 @@ class CutoutTests(unittest.TestCase):
             self.assertTrue(0 < l < r < im.width)
         self.assertEqual(repeated.at(4.7).stance,0)
 
+    def test_stance_forward_backward_duck_and_foot_order(self):
+        notes = [{"time": 2.0, "action": "step_forward"},
+                 {"time": 4.0, "action": "step_backward"},
+                 {"time": 6.0, "action": "duck"}]
+        for lead, rear in (("left", "right"), ("right", "left")):
+            timeline = CoachTimeline(notes, cutout=True, lead_foot=lead)
+            guard = self.rig.transforms(timeline.at(0.0))
+            self.assertGreater(guard["foot_"+lead][1], guard["foot_"+rear][1]+8)
+            self.assertEqual(timeline.at(2.7).depth, 1)
+            self.assertEqual(timeline.at(4.7).depth, 0)
+            self.assertEqual(timeline.at(6.0).action, "duck")
+            self.assertEqual(timeline.at(6.0).state, "strike")
+            low = self.rig.transforms(timeline.at(6.0))
+            self.assertGreater(low["head"][1], guard["head"][1]+35)
+            self.assertGreater(low["pelvis"][1], guard["pelvis"][1]+20)
+            for foot in ("foot_left", "foot_right"):
+                self.assertLess(abs(low[foot][1]-guard[foot][1]), 25)
+            self.assertEqual(timeline.at(8.5).state, "idle")
+            self.assertEqual(timeline.at(3.0), CoachTimeline(notes, cutout=True, lead_foot=lead).at(3.0))
+
     def test_ceil_frame_and_final_celebration(self):
         timeline = CoachTimeline([dict(time=2.017,action="left_jab")], celebrate=True)
         self.assertEqual(timeline.at(48/24).state,"prepare")
@@ -257,7 +277,8 @@ class CutoutTests(unittest.TestCase):
 
     def test_godot_matches_existing_song_timeline_and_bones_after_seeking(self):
         notes = [*self.notes, {"time":20.83, "action":"left_jab"}, {"time":21.3,"action":"step_right"},
-                 {"time":22.8,"action":"step_right"}, {"time":23.9,"action":"right_hook"}]
+                 {"time":22.8,"action":"step_right"}, {"time":23.9,"action":"right_hook"}, {"time":25.5,"action":"step_forward"},
+                 {"time":27.0,"action":"duck"}, {"time":29.0,"action":"step_backward"}]
         timeline = CoachTimeline(notes, cutout=True)
         times = [0, .47, 22.14, 23.1, 24.8, 26.3]
         for note in notes:
@@ -279,7 +300,8 @@ class CutoutTests(unittest.TestCase):
         self.assertEqual(len(frames),len(times))
         for t, frame in zip(times,frames):
             expected = timeline.at(t)
-            state, action, phase, stance, focused = frame["pose"]
+            state, action, phase, stance, focused, depth = frame["pose"]
+            self.assertEqual(depth, expected.depth, t)
             self.assertEqual(stance,expected.stance,t)
             self.assertEqual(focused,expected.focused,t)
             expected_face = "focus" if focused else "happy" if state == "celebrate" and .1 <= phase <= .9 else "open"

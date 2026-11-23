@@ -87,6 +87,16 @@ python3 video/export.py courses/lyrics-and-combos.json build/expert-ring.mp4 --d
 
 当音乐强度上升，拳组会从双拳热身过渡到常规三、四拳组合，再到五拳组合；每个级别都有多个经典套路，镜像重复练习两次后轮换。这是固定的训练乐句模板，不是每个拳点随机选动作，也不是已经实现真实歌曲的主副歌识别。视频会给出当前组合与第几拳的提示；Easy 自动练习不启用长组合。
 
+## 小奶茶站架、前后步与下潜
+
+骨骼小兔支持左脚前/右脚前可选，视频侧边会显示“左脚前 · 正架”或“右脚前 · 反架”。课程指定 `picture.coach.lead_foot` 为 `left` 或 `right`，用 `show_stance_label: false` 可关闭小标签。这不同于 `side`（教练位于屏幕左/右）。
+
+可在手排课程的 `actions` 中填 `step_forward`（前脚先迈、后脚跟上）、`step_backward`（后脚先退、前脚跟上）、`duck`（屈膝下潜再站起）。训练间隔继续自动校验，不改原曲拍点与现有八个动作 ID。公开示范：`courses/footwork-dodge.json`，导出命令：
+
+```sh
+python3 video/export.py courses/footwork-dodge.json build/footwork-dodge.mp4
+```
+
 ## 导出入口
 
 在装有 Godot 4.6.3 Standard、Python 3、Pillow、Noto CJK 字体、FFmpeg 和 ffprobe 的 Linux 环境中执行：
