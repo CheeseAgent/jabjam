@@ -88,15 +88,19 @@ def load_padwork_library(path=None):
             raise ValueError("Each padwork band needs a name and nonempty combo list")
         combos[band] = []
         for entry in entries:
-            if not isinstance(entry, dict) or set(entry) != {"id", "label", "moves"}:
-                raise ValueError(f"Invalid padwork entry in {band}: id, label, moves required")
+            if not isinstance(entry, dict) or not {"id", "label", "moves"} <= set(entry) or set(entry) - {"id", "label", "moves", "hands"}:
+                raise ValueError(f"Invalid padwork entry in {band}: id, label, moves and optional hands required")
             key, label, moves = entry["id"], entry["label"], entry["moves"]
             if (not isinstance(key, str) or not key.isidentifier() or key in by_id or
                     not isinstance(label, str) or not label.strip() or
                     not isinstance(moves, list) or not 2 <= len(moves) <= 12 or
                     any(move not in ("jab", "hook", "uppercut") for move in moves)):
                 raise ValueError(f"Invalid/duplicate padwork combo in {band}: {key!r}")
-            tpl = (key, label, tuple(moves))
+            hands = entry.get("hands", ["left" if i % 2 == 0 else "right" for i in range(len(moves))])
+            if (not isinstance(hands, list) or len(hands) != len(moves) or
+                    any(hand not in ("left", "right") for hand in hands)):
+                raise ValueError(f"Invalid hands for combo {key!r}; specify left/right for each move")
+            tpl = (key, label, tuple(moves), tuple(hands))
             combos[band].append(tpl)
             by_id[key] = tpl
         combos[band] = tuple(combos[band])
@@ -111,7 +115,8 @@ def load_padwork_library(path=None):
     for short, long in finals.items():
         if (short not in by_id or long not in by_id or
                 len(by_id[long][2]) <= len(by_id[short][2]) or
-                by_id[long][2][:len(by_id[short][2])] != by_id[short][2]):
+                by_id[long][2][:len(by_id[short][2])] != by_id[short][2] or
+                by_id[long][3][:len(by_id[short][3])] != by_id[short][3]):
             raise ValueError(f"Chorus finale must extend its teaching phrase: {short!r}")
     if data["default_chorus"] not in finals:
         raise ValueError("default_chorus must exist in chorus_finales")
@@ -147,12 +152,12 @@ def _combo_cues(band, seen, beats, start, course, spacing_beats):
 
 def _place_combo(template, turn, beats, start, course, spacing_beats):
     """Place the lead at start, then find measured beats with enough recovery."""
-    key, label, kinds = template
+    key, label, kinds, hands = template
     built = []
     hit = start
     spacing_time = round(start + course.get("beat_offset_ms", 0) / 1000, 3)
     for index, kind in enumerate(kinds):
-        side = "left" if (turn + index) % 2 == 0 else "right"
+        side = hands[index] if turn % 2 == 0 else ("right" if hands[index] == "left" else "left")
         action = f"{side}_{kind}"
         if built:
             last = built[-1]
