@@ -1,13 +1,25 @@
 {
-  "prepare": 0.30,
-  "strike": 0.10,
-  "recover": 0.30,
+  "prepare": 0.3,
+  "strike": 0.1,
+  "recover": 0.3,
   "minimum_landing": 0.14,
-  "idle": 1.60,
-  "celebrate": 1.60,
+  "idle": 1.6,
+  "celebrate": 1.6,
   "cutout": {
-    "prepare": {"jab": 0.30, "hook": 0.60, "uppercut": 0.64, "step": 0.42},
+    "prepare": {
+      "jab": 0.3,
+      "hook": 0.6,
+      "uppercut": 0.64,
+      "step": 0.42,
+      "advance": 0.44,
+      "retreat": 0.44,
+      "duck": 0.38
+    },
     "step_recover": 0.52,
-    "focus": {"lead": 0.36, "hold": 0.58, "merge_gap": 0.12}
+    "focus": {
+      "lead": 0.36,
+      "hold": 0.58,
+      "merge_gap": 0.12
+    }
   }
 }
