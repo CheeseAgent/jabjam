@@ -37,7 +37,7 @@ def fitted_lines(title, width, height):
 
 
 class OpeningTitle:
-    def __init__(self, title, style):
+    def __init__(self, title, style, album_cover=None):
         self.style = style
         self.card = Image.new("RGBA", (704, 134))
         d = ImageDraw.Draw(self.card)
@@ -61,13 +61,21 @@ class OpeningTitle:
         else:  # vinyl: a die-cut record sleeve and its centre label
             d.rounded_rectangle((4,7,700,132), radius=18, fill=(25, 21, 36, 190))
             d.rounded_rectangle((1,2,697,126), radius=18, fill=(246, 224, 188, 250))
-            d.ellipse((15,9,125,119), fill=(39, 43, 57))
+            center = 94 if album_cover is not None else 70
+            d.ellipse((center-55,9,center+55,119), fill=(39, 43, 57))
             for radius in (49, 43, 36):
-                d.arc((70-radius,64-radius,70+radius,64+radius), 110, 286, fill=(116, 133, 138), width=2)
-            d.ellipse((49,43,91,85), fill=CORAL)
-            d.ellipse((66,60,74,68), fill=CREAM)
-            d.line((140,17,140,111), fill=(165, 132, 107), width=2)
-            left, right, ink = 161, 672, NAVY
+                d.arc((center-radius,64-radius,center+radius,64+radius), 110, 286, fill=(116, 133, 138), width=2)
+            d.ellipse((center-21,43,center+21,85), fill=CORAL)
+            d.ellipse((center-4,60,center+4,68), fill=CREAM)
+            divider = center + 70
+            d.line((divider,17,divider,111), fill=(165, 132, 107), width=2)
+            left, right, ink = divider+21, 672, NAVY
+        if album_cover is not None:
+            x, rim = {"cinema": (57, (231, 197, 128)), "arcade": (78, MINT), "vinyl": (15, CREAM)}[style]
+            edge = album_cover.width
+            d.rectangle((x-2, 14, x+edge+1, 16+edge+1), fill=NAVY, outline=rim, width=2)
+            self.card.alpha_composite(album_cover, (x, 16))
+            left = max(left, x + edge + 20)
         face, rows = fitted_lines(title, right-left, 105)
         step = face.size + 5
         y = 64 - (len(rows)-1)*step/2

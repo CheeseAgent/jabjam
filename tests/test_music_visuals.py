@@ -2,15 +2,17 @@
 from contextlib import closing
 import json
 from pathlib import Path
+import shutil
 import subprocess
 import sys
 import tempfile
 import unittest
 
-from PIL import ImageChops
+from PIL import Image, ImageChops
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "video"))
+from album_cover import COVER_EDGE, load_album_cover
 from arena import Arena
 from audio_wave import song_envelope
 from background_video import STAGE_SIZE, video_frames
@@ -84,6 +86,92 @@ class MusicVisuals(unittest.TestCase):
             self.assertEqual(opening.tobytes(), arena.frame(0).tobytes())
         self.assertEqual(len(styles), 3)
 
+    def test_cover_settings_cli_and_editable_paths(self):
+        cover = self.dir / "我的 封面.png"
+        Image.new("RGB", (48, 24), "blue").save(cover)
+        source = self.course_file({"title_style": "arcade", "album_cover": cover.name})
+        self.assertEqual(config(source)[3]["album_cover"], str(cover))
+        cmd = [sys.executable, "-S", str(ROOT / "video/export.py"), str(source)]
+        frozen = self.dir / "cover-export" / "sheet.json"
+        frozen.parent.mkdir()
+        # The CLI resolves art from its working directory, while the JSON uses its own directory.
+        relative = "../" + cover.name
+        subprocess.run(cmd + ["--album-cover", relative, "--write-course", str(frozen)], cwd=frozen.parent, check=True)
+        data = json.loads(frozen.read_text())
+        self.assertEqual(data["picture"]["album_cover"], relative)
+        self.assertEqual(config(frozen)[3]["album_cover"], str(cover))
+        self.assertEqual(data["actions"], self.notes)
+        for mode in ("off", "auto"):
+            write_course(source, frozen, album_cover=mode)
+            self.assertEqual(config(frozen)[3]["album_cover"], mode)
+        for bad in ("missing.jpg", str(self.song), True, ""):
+            with self.subTest(bad=bad), self.assertRaisesRegex(ValueError, "picture.album_cover"):
+                check_course(source, album_cover=bad)
+        self.assertIn("(title off)", check_course(source, title_style="off", album_cover="missing.jpg"))
+        cover.write_bytes(b"damaged image")
+        output = self.dir / "existing.mp4"
+        output.write_bytes(b"previous render")
+        with self.assertRaisesRegex(ValueError, "picture.album_cover"):
+            export(source, output)
+        self.assertEqual(output.read_bytes(), b"previous render")
+
+    def test_auto_cover_prefers_embedded_front_then_song_sidecar(self):
+        folder = self.dir / "album"
+        folder.mkdir()
+        for name, color in (("front", "red"), ("back", "blue"), ("曲目", "lime")):
+            Image.new("RGB", (60, 30), color).save(folder / (name + ".PNG"))
+        song = folder / "曲目.mp3"
+        subprocess.run([
+            "ffmpeg", "-v", "error", "-i", str(self.song), "-i", str(folder / "back.PNG"), "-i", str(folder / "front.PNG"),
+            "-map", "0:a:0", "-map", "1:v:0", "-map", "2:v:0", "-t", "8", "-ar", "8000",
+            "-c:a", "libmp3lame", "-c:v", "copy",
+            "-metadata:s:v:0", "comment=Cover (back)", "-metadata:s:v:1", "comment=Cover (front)", str(song),
+        ], check=True)
+        auto = {"title_style": "vinyl", "album_cover": "auto"}
+        tile = load_album_cover(auto, song)
+        mid = COVER_EDGE // 2
+        self.assertEqual(tile.getpixel((mid, mid)), (255, 0, 0, 255))
+        self.assertEqual(tile.getbbox(), (0, mid//2, COVER_EDGE, mid + mid//2))
+        # Encoder padding in this low-rate MP3 is several video frames long.
+        path = self.course_file(dict(auto, size=[640, 360]), song)
+        output = folder / "front.mp4"
+        export(path, output)
+        self.assertAlmostEqual(verify_course(output, json.loads(path.read_text()), song), 8, places=2)
+        red, green, blue = frame(output, 1).getpixel((350, 315))
+        self.assertGreater(red, 225)
+        self.assertLess(max(green, blue), 30)
+        sidecar = folder / "曲目.PNG"
+        explicit = load_album_cover(dict(auto, album_cover=str(sidecar)), song)
+        self.assertEqual(explicit.getpixel((mid, mid)), (0, 255, 0, 255))
+        untagged = song.with_suffix(".ogg")
+        shutil.copyfile(self.song, untagged)
+        self.assertEqual(load_album_cover(auto, untagged).tobytes(), explicit.tobytes())
+        sidecar.write_bytes(b"invalid")
+        self.assertIsNone(load_album_cover(auto, untagged))
+        sidecar.unlink()
+        self.assertIsNone(load_album_cover(auto, untagged))
+        self.assertIsNone(load_album_cover(auto, "builtin:demo"))
+        self.assertIsNone(load_album_cover({"title_style": "vinyl"}, song))
+        self.assertIsNone(load_album_cover({"title_style": "off", "album_cover": str(sidecar)}, song))
+
+    def test_album_cover_fits_three_titles_and_leaves_on_the_same_frame(self):
+        title = "拳" * 128
+        tile = Image.new("RGBA", (COVER_EDGE, COVER_EDGE), (19, 251, 89, 255))
+        notes = [{"time": 0, "action": "left_jab"}]
+        for style, cover_x in (("cinema", 57), ("arcade", 78), ("vinyl", 15)):
+            with self.subTest(style=style):
+                picture = {"title_style": style}
+                plain = Arena(title, picture, notes, 8)
+                illustrated = Arena(title, picture, notes, 8, album_cover=tile)
+                full = illustrated.frame(1)
+                x, y = 288 + cover_x, 251 + 16
+                self.assertEqual(full.crop((x, y, x+COVER_EDGE, y+COVER_EDGE)).getextrema(),
+                                 ((19, 19), (251, 251), (89, 89)))
+                hit_box = (260, 430, 510, 580)
+                self.assertEqual(plain.frame(0).crop(hit_box).tobytes(), illustrated.frame(0).crop(hit_box).tobytes())
+                self.assertEqual(plain.frame(TITLE_SECONDS).tobytes(), illustrated.frame(TITLE_SECONDS).tobytes())
+                self.assertEqual(full.tobytes(), illustrated.frame(1).tobytes())
+
     def test_each_wave_follows_source_loudness_and_silence_at_any_song_time(self):
         env = song_envelope(self.song, 24)
         self.assertEqual(max(env[900:1100]), 0)
@@ -117,12 +205,16 @@ class MusicVisuals(unittest.TestCase):
     def test_encoded_video_keeps_song_audio_length_and_hit_guides(self):
         song = self.dir / "short.wav"
         subprocess.run(["ffmpeg", "-v", "error", "-i", str(self.song), "-t", "8", str(song)], check=True)
-        picture = {"size": [640,360], "fps": 24, "title_style":"vinyl", "wave_style":"orbit",
+        Image.new("RGB", (40, 40), "lime").save(song.with_suffix(".png"))
+        picture = {"size": [640,360], "fps": 24, "title_style":"vinyl", "album_cover":"auto", "wave_style":"orbit",
                    "background_video":self.clip.name}
         path = self.course_file(picture, song)
         output = self.dir / "output.mp4"
         export(path, output)
         self.assertAlmostEqual(verify_course(output, json.loads(path.read_text()), song), 8, places=2)
+        red, green, blue = frame(output, 1).getpixel((350, 315))
+        self.assertGreater(green, 225)
+        self.assertLess(max(red, blue), 30)
         original = pcm(song, 4, .18)
         encoded = pcm(output, 4, .18)
         correlation = sum(a*b for a,b in zip(original, encoded)) / (

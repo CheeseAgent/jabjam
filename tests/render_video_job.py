@@ -63,8 +63,12 @@ def verify_course(path, config, source):
     check(abs(int(video["nb_frames"])-dur*fps) <= 2, "Missing frames")
     check(max(map(abs, pcm(path, 0, dur))) > 100, "Silent audio")
     if source is not None:
-        original = float(run("ffprobe","-v","error","-select_streams","a:0","-show_entries",
-                             "stream=duration","-of","csv=p=0",source))
+        if source.suffix.lower() == ".mp3":
+            # Check the playable source independently of its padded MP3 container duration.
+            original = len(pcm(source, 0, 601)) / 8000
+        else:
+            original = float(run("ffprobe","-v","error","-select_streams","a:0","-show_entries",
+                                 "stream=duration","-of","csv=p=0",source))
         check(abs(original-dur) < .12, "Export truncated or extended the source track")
     return dur
 
@@ -139,6 +143,7 @@ def main():
     p.add_argument("--combo-side", choices=COUNTER_SIDES)
     p.add_argument("--combo-style", choices=COUNTER_STYLES)
     p.add_argument("--title-style", choices=TITLE_STYLES)
+    p.add_argument("--album-cover")
     p.add_argument("--wave-style", choices=WAVE_STYLES)
     p.add_argument("--background-video")
     args=p.parse_args()
@@ -148,7 +153,7 @@ def main():
     for flag, value in (("--song-title", args.song_title), ("--difficulty", args.difficulty),
                         ("--min-gap", args.min_gap), ("--beat-offset-ms", args.beat_offset_ms), ("--scene", args.scene),
                         ("--lyrics", args.lyrics), ("--combo-side", args.combo_side), ("--combo-style", args.combo_style),
-                        ("--title-style", args.title_style), ("--wave-style", args.wave_style),
+                        ("--title-style", args.title_style), ("--album-cover", args.album_cover), ("--wave-style", args.wave_style),
                         ("--background-video", args.background_video)):
         if value is not None:
             cmd.append(f"{flag}={value}")

@@ -47,13 +47,15 @@ python3 video/export.py courses/milktea-tour.json build/jellyfish-round.mp4 --sc
 | 片头歌名 `--title-style` | `cinema` 宽银幕金线淡入，`arcade` 街机斜牌滑入，`vinyl` 黑胶唱片封套 |
 | 音乐音波 `--wave-style` | `ribbon` 双侧流光波纹，`bars` 镜面跳柱，`orbit` 一对声波光环 |
 
-例如，给小奶茶的跟练片加一个黑胶片头，让音波随原曲起伏。
+三种片头都可以加专辑封面，默认关闭。下面的示例用仓库里的水母电台插画当封面，小奶茶出场时会看到黑胶封套和随原曲起伏的音波。
 
 ```sh
-python3 video/export.py courses/milktea-tour.json build/vinyl.mp4 --title-style vinyl --wave-style ribbon
+python3 video/export.py courses/milktea-tour.json build/vinyl.mp4 --title-style vinyl --album-cover assets/arenas/jellyfish-radio.jpg --wave-style ribbon
 ```
 
-有自己的视频时，追加 `--background-video "素材/夜景.mp4"`。短片循环，长片播到歌曲结束，成片使用课程的音乐。三个选项都可以单独传 `off`。[课程字段与路径写法](docs/video-export.md#片头音波与视频背景)
+用自己的歌时，传 `--album-cover auto` 会先读歌曲内嵌封面，再找音频旁的同名图片，例如 `夜航.mp3` 旁的 `夜航.jpg`。没有封面就只显示歌名。封面和歌名一起在原曲第 3 秒退场。
+
+有自己的视频时，追加 `--background-video "素材/夜景.mp4"`。短片循环，长片播到歌曲结束，成片使用课程的音乐。[课程字段与路径写法](docs/video-export.md#片头音波与视频背景)
 
 ## 自动谱怎样踩拍
 

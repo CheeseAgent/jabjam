@@ -16,6 +16,7 @@ COUNTER_SIDES = ("auto", "left", "right", "off")
 COUNTER_STYLES = ("minimal", "arcade", "ring")
 TITLE_STYLES = ("off", "cinema", "arcade", "vinyl")
 WAVE_STYLES = ("off", "ribbon", "bars", "orbit")
+COVER_SUFFIXES = (".jpg", ".jpeg", ".png", ".webp")
 
 
 def fixed_scene(value):
@@ -74,7 +75,7 @@ def read_actions(actions):
 def read_picture(picture, scene, lyrics=None, combo_side=None, combo_style=None,
                  title_style=None, wave_style=None):
     fields(picture, ("size", "fps", "approach_seconds", "left_color", "right_color", "scene", "coach",
-                     "lyrics", "combo_side", "combo_style", "title_style", "wave_style", "background_video"), "picture")
+                     "lyrics", "combo_side", "combo_style", "title_style", "album_cover", "wave_style", "background_video"), "picture")
     for field, override, choices in (("lyrics", lyrics, LYRIC_STYLES), ("combo_side", combo_side, COUNTER_SIDES),
                                      ("combo_style", combo_style, COUNTER_STYLES), ("title_style", title_style, TITLE_STYLES),
                                      ("wave_style", wave_style, WAVE_STYLES)):
@@ -137,7 +138,8 @@ def load_lyrics(course, music, actions, show):
 
 
 def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
-           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None):
+           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None,
+           album_cover=None):
     """Return effective course settings, resolved music source, actions, and picture."""
     data = fields(json.loads(path.read_text(encoding="utf-8")), ("version", "course", "actions", "picture"), "config")
     if type(data.get("version")) is not int or data["version"] != 1:
@@ -183,17 +185,23 @@ def config(path, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=
     course["beat_offset_ms"] = number(offset, -250, 250, "course.beat_offset_ms")
     actions = read_actions(data.get("actions", "auto"))
     picture = read_picture(data.get("picture", {}), scene, lyrics, combo_side, combo_style, title_style, wave_style)
-    if background_video is not None:
-        picture["background_video"] = background_video
-    clip = picture.get("background_video", "off")
-    if clip != "off":
-        if not isinstance(clip, str) or not clip.strip():
-            raise ValueError("picture.background_video must be off or a local video path")
-        directory = path.parent if background_video is None else Path.cwd()
-        source = (directory / clip).resolve()
-        if source.suffix.lower() not in (".mp4", ".mov", ".mkv", ".webm") or not source.is_file():
-            raise ValueError(f"picture.background_video needs a local MP4, MOV, MKV or WebM file: {source}")
-        picture["background_video"] = str(source)
+    for field, override, modes, suffixes in (
+        ("background_video", background_video, ("off",), (".mp4", ".mov", ".mkv", ".webm")),
+        ("album_cover", album_cover, ("off", "auto"), COVER_SUFFIXES),
+    ):
+        if override is not None:
+            picture[field] = override
+        value = picture.get(field, "off")
+        if value in modes:
+            continue
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(f"picture.{field} must be {' / '.join(modes)} or a local file path")
+        directory = path.parent if override is None else Path.cwd()
+        source = (directory / value).resolve()
+        active = field != "album_cover" or picture.get("title_style", "off") != "off"
+        if source.suffix.lower() not in suffixes or (active and not source.is_file()):
+            raise ValueError(f"picture.{field} needs a local {' / '.join(suffixes)} file: {source}")
+        picture[field] = str(source)
     load_lyrics(course, music, actions, picture.get("lyrics", "off") != "off")
     return course, music, actions, picture
 
@@ -202,9 +210,11 @@ def check_course(path, **overrides):
     """Check the config and authored spacing without analyzing audio or rendering frames."""
     course, _, actions, picture = config(path, **overrides)
     settings = f"{course['difficulty']}, min_gap {course['min_gap']:g}s"
-    for field in ("title_style", "wave_style", "background_video"):
+    for field in ("title_style", "album_cover", "wave_style", "background_video"):
         if picture.get(field, "off") != "off":
-            value = Path(picture[field]).name if field == "background_video" else picture[field]
+            value = Path(picture[field]).name
+            if field == "album_cover" and picture.get("title_style", "off") == "off":
+                value += " (title off)"
             settings += f", {field}={value}"
     if picture.get("lyrics", "off") != "off":
         count = sum(bool(visible_text(row["text"])) for row in course.get("lyric_lines", ()))

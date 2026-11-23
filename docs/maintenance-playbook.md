@@ -26,6 +26,7 @@
 | 修正骨骼/素材遮挡 | `rig.json`, 独立 PNG、必要时 `video/coach_rig.py`/`scripts/milktea_rig.gd` | Python-Godot 跨渲染器对照及手机画幅审片 | 在 Godot/Python 分别维护不同姿势数据 |
 | 优化画面或字体 | `video/arena.py`, `video/cue_art.py` | 场景测试、编码短片、HUD 与命中帧检查 | 让视觉层改变编排顺序或曲目时间戳 |
 | 调整片头、音波或视频背景 | `video/opening_title.py`、`video/audio_wave.py`、`video/background_video.py`；[课程开关](video-export.md#片头音波与视频背景) | `python3 tests/test_music_visuals.py` 检查长歌名、静音与强拍、短片循环、画面裁切、原曲和动作时间 | 给原曲添加前摇、混入素材音轨，或遮盖击打提示 |
+| 给片头换专辑封面 | 在课程 `picture.album_cover` 填 `auto` 或图片路径，同时选择 `title_style`。图片来源在 `video/album_cover.py`，版式在 `video/opening_title.py` | `python3 tests/test_music_visuals.py` 检查内嵌正面、同名图片、三种样式和第 3 秒退场 | 把只属于某首歌的封面带进其他课程 |
 | 私有出片工作流 | `jabjam-render` 的 `.github/workflows/render-video.yml` | 私有动作工作流和私人歌曲烟雾测试 | 拷贝私有音乐进公开仓库；把私有内容写到公开 Actions |
 
 ## 给新歌找逐行歌词
