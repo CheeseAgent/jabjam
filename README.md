@@ -79,7 +79,15 @@ python3 video/export.py courses/lyrics-and-combos.json build/expert-ring.mp4 --d
 
 ## 固定组合拳练习（padwork）
 
-经典连招现在由 [`video/padwork_combos.json`](video/padwork_combos.json) 维护，不用改 Python。`bands` 按训练强度列出每套连招的 `id`、`label` 和 `moves`（`jab` 直拳、`hook` 摆拳、`uppercut` 上勾拳），`section_bands` 指定 Normal/Hard/Expert 的递进组合，`chorus_finales` 定义副歌延长版。连招 ID 必须唯一；副歌延长版必须以原三拳开头。修改后运行 `python3 tests/test_video_pacing.py` 和完整回归。现有 18 套连招已原样迁入。
+经典连招现在由 [`video/padwork_combos.json`](video/padwork_combos.json) 维护，不用改 Python。`bands` 按训练强度列出每套连招的 `id`、`label`、`moves` 和 `hands`（`jab` 直拳、`hook` 摆拳、`uppercut` 上勾拳；`hands` 用对应位置的 `left` 或 `right` 指定出拳手），`section_bands` 指定 Normal/Hard/Expert 的递进组合，`chorus_finales` 定义副歌延长版。连招 ID 必须唯一；副歌延长版必须以原三拳开头。修改后运行 `python3 tests/test_video_pacing.py` 和完整回归。现有 18 套连招已原样迁入，且均显式标注了左右手。
+例如这套「左直、左直、右摆」能让同一只手连打两拳：
+
+```json
+{"id": "left_double_jab_hook", "label": "左直左直右摆", "moves": ["jab", "jab", "hook"], "hands": ["left", "left", "right"]}
+```
+
+每套组合在下一次练习时会自动左右镜像为「右直、右直、左摆」，不会强制逐拳交替。`hands` 省略时为旧版交替左右手的默认顺序；相同手连续出拳会使用现有恢复间隔规则、在后续可用拍点落拳，不能无间隔挤在同一拍。
+
 
 
 
