@@ -71,58 +71,54 @@ def mixed_round(notes, course):
 
 
 
-# A small coaching vocabulary, not isolated random punches. Entries can be extended
-# without changing rendering, course schemas, or chart caching.
-# 直 = jab/straight, 摆 = hook, 勾 = uppercut; each pattern is mirrored.
-PADWORK_COMBOS = {
-    "warmup": (
-        ("straight_pair", "直直", ("jab", "jab")),
-        ("jab_hook", "直摆", ("jab", "hook")),
-    ),
-    "steady": (
-        ("jab_jab_hook", "直直摆", ("jab", "jab", "hook")),
-        ("jab_jab_uppercut", "直直勾", ("jab", "jab", "uppercut")),
-        ("jab_hook_jab", "直摆直", ("jab", "hook", "jab")),
-        ("jab_uppercut_jab", "直勾直", ("jab", "uppercut", "jab")),
-        ("jab_jab_hook_jab", "直直摆直", ("jab", "jab", "hook", "jab")),
-        ("jab_jab_uppercut_jab", "直直勾直", ("jab", "jab", "uppercut", "jab")),
-    ),
-    "peak": (
-        ("jab_jab_hook_uppercut_jab", "直直摆勾直",
-         ("jab", "jab", "hook", "uppercut", "jab")),
-        ("jab_jab_hook_jab_uppercut", "直直摆直勾",
-         ("jab", "jab", "hook", "jab", "uppercut")),
-        ("jab_uppercut_jab_hook_jab", "直勾直摆直",
-         ("jab", "uppercut", "jab", "hook", "jab")),
-        ("jab_jab_uppercut_hook_jab", "直直勾摆直",
-         ("jab", "jab", "uppercut", "hook", "jab")),
-        ("jab_hook_jab_uppercut_jab", "直摆直勾直",
-         ("jab", "hook", "jab", "uppercut", "jab")),
-        ("jab_jab_hook_jab_hook", "直直摆直摆",
-         ("jab", "jab", "hook", "jab", "hook")),
-    ),
-    "six": (
-        ("double_three", "直直摆直直勾", ("jab", "jab", "hook", "jab", "jab", "uppercut")),
-        ("six_turn", "直摆直勾摆直", ("jab", "hook", "jab", "uppercut", "hook", "jab")),
-    ),
-    "eight": (
-        ("two_fours", "直直摆直直勾摆直", ("jab", "jab", "hook", "jab", "jab", "uppercut", "hook", "jab")),
-        ("eight_turn", "直勾直摆直直勾直", ("jab", "uppercut", "jab", "hook", "jab", "jab", "uppercut", "jab")),
-    ),
-}
+# The source of truth for padwork combos, difficulty progression and chorus variants.
+# Edit video/padwork_combos.json instead of changing the choreography algorithm.
+def load_padwork_library(path=None):
+    path = Path(path) if path is not None else Path(__file__).with_name("padwork_combos.json")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if set(data) != {"format", "version", "bands", "section_bands", "chorus_finales", "default_chorus"}:
+        raise ValueError("Padwork combo library needs format, version, bands, section_bands, chorus_finales, default_chorus")
+    if (data["format"], data["version"]) != ("jabjam.padwork-combos", 1):
+        raise ValueError("Unsupported padwork combo library format/version")
+    if not isinstance(data["bands"], dict) or not data["bands"]:
+        raise ValueError("Padwork bands must be a nonempty object")
+    combos, by_id = {}, {}
+    for band, entries in data["bands"].items():
+        if not isinstance(band, str) or not isinstance(entries, list) or not entries:
+            raise ValueError("Each padwork band needs a name and nonempty combo list")
+        combos[band] = []
+        for entry in entries:
+            if not isinstance(entry, dict) or set(entry) != {"id", "label", "moves"}:
+                raise ValueError(f"Invalid padwork entry in {band}: id, label, moves required")
+            key, label, moves = entry["id"], entry["label"], entry["moves"]
+            if (not isinstance(key, str) or not key.isidentifier() or key in by_id or
+                    not isinstance(label, str) or not label.strip() or
+                    not isinstance(moves, list) or not 2 <= len(moves) <= 12 or
+                    any(move not in ("jab", "hook", "uppercut") for move in moves)):
+                raise ValueError(f"Invalid/duplicate padwork combo in {band}: {key!r}")
+            tpl = (key, label, tuple(moves))
+            combos[band].append(tpl)
+            by_id[key] = tpl
+        combos[band] = tuple(combos[band])
+    sections = data["section_bands"]
+    if (not isinstance(sections, dict) or set(sections) != {"normal", "hard", "expert"} or
+            any(not isinstance(v, list) or len(v) != 3 or any(b not in combos for b in v)
+                for v in sections.values())):
+        raise ValueError("section_bands must define three valid bands for normal/hard/expert")
+    finals = data["chorus_finales"]
+    if not isinstance(finals, dict) or not finals:
+        raise ValueError("chorus_finales must name teaching and finale combo IDs")
+    for short, long in finals.items():
+        if (short not in by_id or long not in by_id or
+                len(by_id[long][2]) <= len(by_id[short][2]) or
+                by_id[long][2][:len(by_id[short][2])] != by_id[short][2]):
+            raise ValueError(f"Chorus finale must extend its teaching phrase: {short!r}")
+    if data["default_chorus"] not in finals:
+        raise ValueError("default_chorus must exist in chorus_finales")
+    return combos, {k: tuple(v) for k, v in sections.items()}, finals, data["default_chorus"]
 
-# Warm, steady and peak sections use progressively longer complete patterns.
-SECTION_BANDS = {"normal": ("warmup", "steady", "peak"), "hard": ("warmup", "peak", "six"),
-                 "expert": ("steady", "six", "eight")}
 
-# Each finale starts with the exact same three moves as its teaching phrase.
-CHORUS_FINALES = {
-    "jab_jab_hook": "jab_jab_hook_uppercut_jab",
-    "jab_jab_uppercut": "jab_jab_uppercut_hook_jab",
-    "jab_hook_jab": "jab_hook_jab_uppercut_jab",
-    "jab_uppercut_jab": "jab_uppercut_jab_hook_jab",
-}
-DEFAULT_CHORUS = "jab_jab_hook"
+PADWORK_COMBOS, SECTION_BANDS, CHORUS_FINALES, DEFAULT_CHORUS = load_padwork_library()
 CHORUS_LABELS = {"learn": "副歌学招", "mirror": "副歌换边", "repeat": "副歌再来", "extend": "副歌加长"}
 
 
