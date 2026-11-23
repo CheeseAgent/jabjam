@@ -9,7 +9,7 @@ from course import ART_HORIZONS, fixed_scene
 from audio_wave import draw_wave
 from background_video import STAGE_SIZE, STAGE_TOP
 from movements import MOVEMENTS, LEFT
-from cue_art import punch_icon, foot_pad, step_landing
+from cue_art import punch_icon, foot_pad, step_landing, duck_icon
 from coach_avatar import CoachLayer
 from lettering import font, text
 from opening_title import OpeningTitle, TITLE_SECONDS
@@ -55,7 +55,7 @@ class Arena:
         for radius in range(47, 0, -1):
             glow.ellipse((48-radius, 48-radius, 48+radius, 48+radius),
                          fill=round(155*(1-radius/48)**1.4))
-        self.has_steps = any(MOVEMENTS[note["action"]].kind == "step" for note in notes)
+        self.has_steps = any(MOVEMENTS[note["action"]].kind in ("step", "advance", "retreat") for note in notes)
         self.base = self.background(title)
         self.coach = CoachLayer(self.notes, picture.get("coach", {}))
         self.hud = WorkoutHud(picture, self.notes, self.times, beats, bpm, lyric_lines)
@@ -243,7 +243,10 @@ class Arena:
         d.rounded_rectangle((x-r,y-r,x+r,y+r),radius=max(1,int(r*.12)),fill=color,
                             outline=blend(color,WHITE,.70),width=max(1,int(r*.05)))
         d.line((x-r*.72,y+r*.78,x+r*.72,y+r*.78),fill=blend(color,INK,.28),width=max(1,int(r*.05)))
-        punch_icon(d,x,y-r*.06,r*.94,move,INK)
+        if move.kind == "duck":
+            duck_icon(d,x,y-r*.06,r*.94,color)
+        else:
+            punch_icon(d,x,y-r*.06,r*.94,move,INK)
 
     def burst(self, im, d, side, hook, age, color):
         x, y, _ = self.position(side, 1)
@@ -313,7 +316,7 @@ class Arena:
             move = MOVEMENTS[self.notes[j]["action"]]
             color = self.colors[0 if move.side == LEFT else 1]
             progress = 1 - (self.times[j] - t) / self.lead
-            if move.kind == "step":
+            if move.kind in ("step", "advance", "retreat"):
                 x, y, radius = self.position(move.side, progress)
                 foot_pad(d, x, y + radius, radius, move, color)
             else:
@@ -322,7 +325,7 @@ class Arena:
             move = MOVEMENTS[self.notes[j]["action"]]
             color = self.colors[0 if move.side == LEFT else 1]
             age = t - self.times[j]
-            if move.kind == "step":
+            if move.kind in ("step", "advance", "retreat"):
                 x, y, radius = self.position(move.side, 1)
                 step_landing(d, x, y + radius, radius, move, color, age / SHATTER)
             else:
@@ -339,7 +342,7 @@ class Arena:
         if just_hit:
             cue = self.notes[index - 1]
             move = MOVEMENTS[cue["action"]]
-            verb = "落步" if move.kind == "step" else "击打"
+            verb = "落步" if move.kind in ("step", "advance", "retreat") else ("闪躲" if move.kind == "duck" else "击打")
             label = f"{verb}  /  {move.label}"
         elif index < len(self.notes):
             cue = self.notes[index]
@@ -347,7 +350,7 @@ class Arena:
         else:
             label = "收势  /  放松"
         text(im,(640,650),label,26,WHITE,True,"center")
-        hint = "空中方块出拳   /   地面脚印侧步" if self.has_steps else "方块到线时出拳"
+        hint = "空中方块出拳或闪躲   /   地面脚印完成侧步、前后跟步" if self.has_steps else "方块到线时出拳或下潜"
         text(im,(640,692),hint,15,DUSK,False,"center")
         if cue and cue.get("combo_name") and (just_hit or cue["combo_step"] > 1):
             caption = f"组合拳  /  {combo_caption(cue)}     {cue['combo_step']}/{cue['combo_total']}"
