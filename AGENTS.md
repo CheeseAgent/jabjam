@@ -39,7 +39,7 @@ python3 video/export.py courses/eight-moves.json --check
 | 给新歌找逐行歌词，让组合从句首起手 | [小奶茶的找词顺序和国内来源](docs/maintenance-playbook.md#给新歌找逐行歌词) | 核对录音版本，在 Normal、Hard 或 Expert 自动喂靶课程的 `--check` 输出里确认歌词行数。 |
 | 增减课程字段，改默认值或报错 | [course.py](video/course.py) 的 `config` | `python3 tests/test_video_pacing.py` 同时覆盖配置、间隔和命令行。 |
 | 调整恢复间隔、自动谱中的侧步 | [choreography.py](video/choreography.py) 的 `required_gap`、`arrange` | 跑上面的规则测试，再用 `--write-course` 查看实际动作和时间。 |
-| 增加教练组合 | [choreography.py](video/choreography.py) 的 `PADWORK_COMBOS`，每项给出 ID、显示名和出拳顺序 | 跑规则测试。用默认课程写出手排谱，查看 `combo_name` 和 `combo_step`。 |
+| 增加教练组合 | [padwork_combos.json](video/padwork_combos.json) 的 `bands`；每项配置 ID、显示名、`moves` 和逐拳 `hands`（可连续同手） | 跑规则测试。用默认课程写出手排谱，查看 `combo_name` 和 `combo_step`。 |
 | 改动作名称、箭头、脚印或场景 | [动作表](video/movements.py)、[图形](video/cue_art.py)、[画面](video/arena.py) | 导出下方八动作短片，抽帧看左右方向和落点。加 `--scene classic` 可对照经典背景。 |
 | 调整拍点分析或交互原型 | [chart_generator.gd](scripts/chart_generator.gd)、[原型开发指南](docs/development.md) | `sh scripts/verify.sh` |
 
