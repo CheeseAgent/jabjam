@@ -14,7 +14,7 @@ MIN_GAP = {name: profile["gap"] for name, profile in DIFFICULTIES.items()}
 def required_gap(previous, current, course):
     gap = course["min_gap"]
     profile = DIFFICULTIES[course["difficulty"]]
-    if previous.kind == "step" or current.kind == "step":
+    if previous.kind in ("step", "advance", "retreat", "duck") or current.kind in ("step", "advance", "retreat", "duck"):
         return max(gap, profile["step"])
     if previous.side == current.side or previous.kind in ("hook", "uppercut"):
         return max(gap, profile["recovery"])
