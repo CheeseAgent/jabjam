@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "course": {
+    "song_title": "小奶茶拳击站架 · 前后步与下潜",
+    "music": "../tests/fixtures/pulse.ogg",
+    "difficulty": "normal"
+  },
+  "actions": [
+    {
+      "time": 4,
+      "action": "step_forward"
+    },
+    {
+      "time": 7,
+      "action": "duck"
+    },
+    {
+      "time": 10,
+      "action": "left_jab"
+    },
+    {
+      "time": 13,
+      "action": "step_backward"
+    },
+    {
+      "time": 16,
+      "action": "duck"
+    },
+    {
+      "time": 19,
+      "action": "right_hook"
+    }
+  ],
+  "picture": {
+    "size": [
+      1280,
+      720
+    ],
+    "fps": 24,
+    "approach_seconds": 2,
+    "coach": {
+      "enabled": true,
+      "renderer": "rig",
+      "skin": "milktea",
+      "side": "right",
+      "lead_foot": "left",
+      "show_stance_label": true,
+      "scale": 1
+    }
+  }
+}
