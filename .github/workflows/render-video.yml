@@ -46,6 +46,9 @@ on:
         type: choice
         options: [course, 'off', cinema, arcade, vinyl]
         default: course
+      album_cover:
+        description: 片头封面（auto 读取歌曲封面，也可填仓库内图片路径，off 关闭，留空沿用课程）
+        type: string
       wave_style:
         description: 音波（流光波纹、镜面跳柱、声波光环）
         type: choice
@@ -107,6 +110,7 @@ jobs:
       COMBO_SIDE: ${{ inputs.combo_side || 'course' }}
       COMBO_STYLE: ${{ inputs.combo_style || 'course' }}
       TITLE_STYLE: ${{ inputs.title_style || 'course' }}
+      ALBUM_COVER: ${{ inputs.album_cover }}
       WAVE_STYLE: ${{ inputs.wave_style || 'course' }}
       BACKGROUND_VIDEO: ${{ inputs.background_video }}
       VERIFY_SAMPLES: ${{ github.event_name != 'workflow_dispatch' || inputs.verify_samples }}
@@ -135,6 +139,7 @@ jobs:
           if [[ "$COMBO_SIDE" != course ]]; then options+=("--combo-side=$COMBO_SIDE"); fi
           if [[ "$COMBO_STYLE" != course ]]; then options+=("--combo-style=$COMBO_STYLE"); fi
           if [[ "$TITLE_STYLE" != course ]]; then options+=("--title-style=$TITLE_STYLE"); fi
+          if [[ -n "$ALBUM_COVER" ]]; then options+=("--album-cover=$ALBUM_COVER"); fi
           if [[ "$WAVE_STYLE" != course ]]; then options+=("--wave-style=$WAVE_STYLE"); fi
           if [[ -n "$BACKGROUND_VIDEO" ]]; then options+=("--background-video=$BACKGROUND_VIDEO"); fi
 

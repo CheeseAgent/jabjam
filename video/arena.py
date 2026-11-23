@@ -29,7 +29,8 @@ def blend(a, b, p):
 
 
 class Arena:
-    def __init__(self, title, picture, notes, duration, *, beats=(), bpm=120, lyric_lines=(), envelope=b""):
+    def __init__(self, title, picture, notes, duration, *, beats=(), bpm=120, lyric_lines=(), envelope=b"",
+                 album_cover=None):
         # Snap the presentation only. The chart and audio keep their source timestamps.
         fps = picture.get("fps", 24)
         last_frame = ceil(duration * fps) - 1
@@ -43,7 +44,7 @@ class Arena:
         self.neon = self.scene == "neon" and not self.has_video
         self.horizon = HORIZON if self.has_video else ART_HORIZONS.get(self.scene, HORIZON)
         title_style = picture.get("title_style", "off")
-        self.opening = OpeningTitle(title, title_style) if title_style != "off" else None
+        self.opening = OpeningTitle(title, title_style, album_cover) if title_style != "off" else None
         self.wave_style = picture.get("wave_style", "off")
         self.envelope = envelope
         if self.wave_style != "off" and not envelope:

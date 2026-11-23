@@ -41,16 +41,27 @@ def prepare(course, music, actions, tmp):
                         course.get("difficulty", "normal"), str(course.get("bpm", 0)), str(chart_file)],
                        env=env, check=True, timeout=240)
     audio = generated if music == "builtin:demo" else music
+    entries = "stream=codec_name,duration,sample_rate:stream_tags=title:format_tags=title"
+    mp3 = audio.suffix.lower() == ".mp3"
+    if mp3:
+        # MP3 stream duration can include encoder delay and tail padding. Decoded frames
+        # trim both, matching the samples FFmpeg will actually mux with the opening.
+        entries += ":frame=nb_samples"
     probe = subprocess.check_output(["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe",
-                                    "-select_streams", "a:0", "-show_entries", "stream=codec_name,duration:stream_tags=title:format_tags=title",
-                                    "-of", "json", str(audio)])
+                                    "-select_streams", "a:0", "-read_intervals", "%+601",
+                                    "-show_entries", entries, "-of", "json", str(audio)])
     metadata = json.loads(probe)
     streams = metadata["streams"]
     if not streams:
         raise ValueError("Audio track missing")
     if audio.suffix.lower() == ".ogg" and streams[0]["codec_name"] != "vorbis":
         raise ValueError("Expected Ogg Vorbis")
-    duration = number(float(streams[0]["duration"]), 8, 600, "audio duration")
+    if mp3:
+        samples = sum(frame["nb_samples"] for frame in metadata.get("frames", []))
+        seconds = samples / int(streams[0]["sample_rate"])
+    else:
+        seconds = float(streams[0]["duration"])
+    duration = number(seconds, 8, 600, "audio duration")
     chart = None
     if actions == "auto":
         chart = json.loads(chart_file.read_text())
@@ -82,13 +93,16 @@ def display_beats(course, chart, duration):
 
 
 def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_offset_ms=None, scene=None,
-           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None):
+           lyrics=None, combo_side=None, combo_style=None, title_style=None, wave_style=None, background_video=None,
+           album_cover=None):
+    from album_cover import load_album_cover
     from arena import Arena
     from audio_wave import song_envelope
     from background_video import video_frames
 
     course, music, actions, picture = config(path, song_title, difficulty, min_gap, beat_offset_ms, scene,
-                                             lyrics, combo_side, combo_style, title_style, wave_style, background_video)
+                                             lyrics, combo_side, combo_style, title_style, wave_style, background_video,
+                                             album_cover)
     if output.suffix.lower() != ".mp4":
         raise ValueError("Output must end in .mp4")
     clip = picture.get("background_video", "off")
@@ -101,7 +115,8 @@ def export(path, output, song_title=None, difficulty=None, min_gap=None, beat_of
         audio, duration, notes, title, chart = prepare(course, music, actions, tmp)
         envelope = song_envelope(audio, duration) if picture.get("wave_style", "off") != "off" else b""
         arena = Arena(title, picture, notes, duration, beats=display_beats(course, chart, duration),
-                      bpm=course.get("bpm", 120), lyric_lines=course.get("lyric_lines", ()), envelope=envelope)
+                      bpm=course.get("bpm", 120), lyric_lines=course.get("lyric_lines", ()), envelope=envelope,
+                      album_cover=load_album_cover(picture, music))
         size = picture.get("size", [1280, 720])
         fps = picture.get("fps", 24)
         temp_mp4 = tmp / "render.mp4"
@@ -162,8 +177,9 @@ def write_course(path, output, **overrides):
         course["song_title"] = title
         if music != "builtin:demo":
             course["music"] = os.path.relpath(music, output.parent.resolve())
-        if picture.get("background_video", "off") != "off":
-            picture["background_video"] = os.path.relpath(picture["background_video"], output.parent.resolve())
+        for field in ("background_video", "album_cover"):
+            if picture.get(field, "off") not in ("off", "auto"):
+                picture[field] = os.path.relpath(picture[field], output.parent.resolve())
         editable = {"version": 1, "course": course, "actions": notes, "picture": picture}
         ready = tmp / "course.json"
         ready.write_text(json.dumps(editable, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
@@ -188,6 +204,8 @@ if __name__ == "__main__":
     parser.add_argument("--combo-side", choices=COUNTER_SIDES, help="Counter position; auto is opposite the coach")
     parser.add_argument("--combo-style", choices=COUNTER_STYLES, help="Visual style of the on-screen streak")
     parser.add_argument("--title-style", choices=TITLE_STYLES, help="Opening song title for the first three seconds")
+    parser.add_argument("--album-cover", metavar="off|auto|PATH",
+                        help="Opening title artwork: off (default), embedded/same-name art, or a local image")
     parser.add_argument("--wave-style", choices=WAVE_STYLES, help="Stage waveform driven by the song audio")
     parser.add_argument("--background-video", metavar="PATH|off", help="Local video backdrop (CLI paths use the current directory)")
     args = parser.parse_args()
@@ -195,7 +213,7 @@ if __name__ == "__main__":
         overrides = dict(song_title=args.song_title, difficulty=args.difficulty, min_gap=args.min_gap,
                          beat_offset_ms=args.beat_offset_ms, scene=args.scene, lyrics=args.lyrics,
                          combo_side=args.combo_side, combo_style=args.combo_style, title_style=args.title_style,
-                         wave_style=args.wave_style, background_video=args.background_video)
+                         wave_style=args.wave_style, background_video=args.background_video, album_cover=args.album_cover)
         if args.check:
             print(check_course(args.config, **overrides))
         elif args.write_course is not None:
